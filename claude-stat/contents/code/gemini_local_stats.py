@@ -22,8 +22,9 @@ month_ts = (local_midnight - timedelta(days=30)).timestamp() * 1000
 HOURLY_WINDOW = 12
 hourly_cutoff_ts = (now_utc - timedelta(hours=HOURLY_WINDOW)).timestamp() * 1000
 
-# --- Account ---
+# --- Account & tier ---
 account = ""
+auth_type = "oauth-personal"
 try:
     with open(accounts_file) as f:
         acc = json.load(f)
@@ -33,6 +34,24 @@ try:
         account = acc[0] if isinstance(acc[0], str) else acc[0].get("email", "")
 except:
     pass
+
+try:
+    with open(os.path.join(gemini_dir, "settings.json")) as f:
+        settings = json.load(f)
+    auth_type = settings.get("security", {}).get("auth", {}).get("selectedType", "oauth-personal")
+except:
+    pass
+
+# Tier limits (requests per day)
+TIER_LIMITS = {
+    "oauth-personal": {"label": "Free", "requests_per_day": 1000},
+    "oauth-workspace-standard": {"label": "Standard", "requests_per_day": 1500},
+    "oauth-workspace-enterprise": {"label": "Enterprise", "requests_per_day": 2000},
+    "api-key": {"label": "API Key", "requests_per_day": 250},
+}
+tier_info = TIER_LIMITS.get(auth_type, TIER_LIMITS["oauth-personal"])
+daily_req_limit = tier_info["requests_per_day"]
+tier_label = tier_info["label"]
 
 # --- Accumulators ---
 tok_today = {"input": 0, "output": 0, "cached": 0, "thoughts": 0, "tool": 0, "total": 0}
@@ -44,10 +63,16 @@ daily_token_map = {}
 fine_token_map = {}
 models_used = {}
 prompts = {"today": 0, "week": 0, "month": 0, "total": 0}
+requests = {"today": 0, "week": 0, "month": 0, "total": 0}  # gemini responses = API requests
 session_count = 0
 recent_sessions = []
 
 FINE_BUCKET_MIN = 5
+
+RATE_WINDOW_SHORT = 5 * 60 * 1000
+RATE_WINDOW_LONG = 30 * 60 * 1000
+rate_cutoff_ts = now_ms - RATE_WINDOW_LONG
+recent_events = []  # [(ts_ms, inp, out)]
 
 def _parse_iso_ts(ts_str):
     try:
@@ -76,6 +101,10 @@ def add_tokens(ts_ms, tokens):
             if ts_ms >= today_ts:
                 tok_today["input"] += inp; tok_today["output"] += out; tok_today["cached"] += cached
                 tok_today["thoughts"] += thoughts; tok_today["tool"] += tool; tok_today["total"] += total
+
+    # Rate tracking
+    if ts_ms >= rate_cutoff_ts:
+        recent_events.append((ts_ms, inp + cached + thoughts + tool, out))
 
     # Daily bucket
     try:
@@ -131,6 +160,12 @@ try:
                     if ts_ms >= week_ts: prompts["week"] += 1
                     if ts_ms >= month_ts: prompts["month"] += 1
                     continue
+
+                if msg_type == "gemini":
+                    requests["total"] += 1
+                    if ts_ms >= today_ts: requests["today"] += 1
+                    if ts_ms >= week_ts: requests["week"] += 1
+                    if ts_ms >= month_ts: requests["month"] += 1
 
                 if msg_type != "gemini":
                     continue
@@ -199,29 +234,74 @@ active_count = 0
 try:
     import subprocess
     result = subprocess.run(["pgrep", "-af", "gemini"], capture_output=True, text=True, timeout=2)
+    seen_pids = set()
     for line in result.stdout.strip().split("\n"):
-        if line and "gemini" in line.lower() and "pgrep" not in line and "gemini_local_stats" not in line:
-            parts = line.split(None, 1)
-            if parts:
-                try:
-                    pid = int(parts[0])
-                    if os.path.exists(f"/proc/{pid}"):
-                        active_count += 1
-                        active_sessions.append({"pid": pid, "cmd": parts[1] if len(parts) > 1 else ""})
-                except:
-                    pass
+        if not line or "pgrep" in line or "gemini_local_stats" in line or "gemini_stats" in line:
+            continue
+        if "/usr/bin/gemini" not in line and "gemini" not in line.lower():
+            continue
+        parts = line.split(None, 1)
+        if not parts:
+            continue
+        try:
+            pid = int(parts[0])
+            if not os.path.exists(f"/proc/{pid}"):
+                continue
+            # Skip child processes — only count the parent (ppid != another gemini pid)
+            ppid_file = f"/proc/{pid}/stat"
+            with open(ppid_file) as pf:
+                stat_fields = pf.read().split()
+                ppid = int(stat_fields[3])
+            if ppid in seen_pids:
+                continue  # child of another gemini process
+            seen_pids.add(pid)
+            active_count += 1
+            active_sessions.append({"pid": pid, "cmd": parts[1] if len(parts) > 1 else ""})
+        except:
+            pass
 except:
     pass
 
+# --- Throughput rates ---
+def calc_rate(window_ms, extract_fn):
+    cutoff_r = now_ms - window_ms
+    filtered = [(ts, extract_fn(inp, out)) for ts, inp, out in recent_events if ts >= cutoff_r]
+    total = sum(v for _, v in filtered)
+    if total == 0: return 0.0
+    earliest = min(ts for ts, _ in filtered)
+    span_h = max(now_ms - earliest, 60_000) / 3_600_000
+    return total / span_h
+
+if recent_events:
+    rate_output_5m = calc_rate(RATE_WINDOW_SHORT, lambda i, o: o)
+    rate_output_30m = calc_rate(RATE_WINDOW_LONG, lambda i, o: o)
+    rate_all_5m = calc_rate(RATE_WINDOW_SHORT, lambda i, o: i + o)
+    rate_all_30m = calc_rate(RATE_WINDOW_LONG, lambda i, o: i + o)
+else:
+    rate_output_5m = rate_output_30m = rate_all_5m = rate_all_30m = 0.0
+
 print(json.dumps({
     "account": account,
+    "tier": tier_label,
+    "auth_type": auth_type,
+    "quota": {
+        "requests_today": requests["today"],
+        "requests_limit": daily_req_limit,
+    },
     "sessions": {"active": active_count, "total": session_count},
     "prompts": prompts,
+    "requests": requests,
     "tokens": {
         "today": tok_today,
         "week": tok_week,
         "month": tok_month,
         "total": tok_all,
+    },
+    "throughput": {
+        "rate_output_5m": round(rate_output_5m),
+        "rate_output_30m": round(rate_output_30m),
+        "rate_all_5m": round(rate_all_5m),
+        "rate_all_30m": round(rate_all_30m),
     },
     "daily_tokens": daily_tokens,
     "fine_tokens": fine_tokens,

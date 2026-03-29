@@ -30,7 +30,11 @@ Flickable {
             Layout.margins: Kirigami.Units.smallSpacing
 
             PlasmaComponents.Label {
-                text: appRoot.gcliAccount || "Gemini CLI"
+                text: {
+                    var parts = [appRoot.gcliTier || "Gemini CLI"]
+                    if (appRoot.gcliAccount) parts.push(appRoot.gcliAccount)
+                    return parts.join(" \u00b7 ")
+                }
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 opacity: 0.5
                 Layout.fillWidth: true
@@ -85,25 +89,19 @@ Flickable {
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: Kirigami.Units.smallSpacing
 
-                    // Today ring (left)
+                    // Quota ring (left) — requests today vs daily limit
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
-                        DualQuotaRing {
+                        QuotaRing {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: gcliDashRow.parent._ringSize; height: gcliDashRow.parent._ringSize
-                            outerUsed: appRoot.gcliTokInToday
-                            outerLimit: Math.max(appRoot.gcliTokInMonth / 7, appRoot.gcliTokInToday * 1.2, 1)
-                            outerLabel: "in"
-                            outerColor: Kirigami.Theme.highlightColor
-                            innerUsed: appRoot.gcliTokOutToday
-                            innerLimit: Math.max(appRoot.gcliTokOutMonth / 7, appRoot.gcliTokOutToday * 1.2, 1)
-                            innerLabel: "out"
-                            innerColor: Kirigami.Theme.positiveTextColor
+                            used: appRoot.gcliReqToday; limit: appRoot.gcliReqLimit; label: "req/day"
+                            ringColor: pct > 0.9 ? Kirigami.Theme.negativeTextColor : pct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
                         }
                         PlasmaComponents.Label {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: i18n("Today")
+                            text: i18n("Quota")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
                             opacity: 0.35
                         }
@@ -113,30 +111,33 @@ Flickable {
                     Tachometer {
                         anchors.verticalCenter: parent.verticalCenter
                         width: gcliDashRow.parent._tachoW; height: gcliDashRow.parent._tachoW * 0.72
-                        value: appRoot.gcliInstantRate
-                        maxValue: 1.0
-                        label: i18n("activity")
+                        value: appRoot.gcliInstantAllRate
+                        avgValue: appRoot.gcliRateAll30m
+                        maxValue: 300000000
+                        label: i18n("tok/h")
+                        innerValue: appRoot.gcliInstantOutputRate
+                        innerMaxValue: 500000
                     }
 
-                    // Week ring (right)
+                    // Today tokens ring (right) — in/out
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
                         DualQuotaRing {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: gcliDashRow.parent._ringSize; height: gcliDashRow.parent._ringSize
-                            outerUsed: appRoot.gcliTokInWeek
-                            outerLimit: Math.max(appRoot.gcliTokInMonth, appRoot.gcliTokInWeek * 1.2, 1)
+                            outerUsed: appRoot.gcliTokInToday
+                            outerLimit: Math.max(appRoot.gcliTokInWeek, appRoot.gcliTokInToday * 1.5, 1)
                             outerLabel: "in"
                             outerColor: Kirigami.Theme.highlightColor
-                            innerUsed: appRoot.gcliTokOutWeek
-                            innerLimit: Math.max(appRoot.gcliTokOutMonth, appRoot.gcliTokOutWeek * 1.2, 1)
+                            innerUsed: appRoot.gcliTokOutToday
+                            innerLimit: Math.max(appRoot.gcliTokOutWeek, appRoot.gcliTokOutToday * 1.5, 1)
                             innerLabel: "out"
                             innerColor: Kirigami.Theme.positiveTextColor
                         }
                         PlasmaComponents.Label {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: i18n("Week")
+                            text: i18n("Today")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
                             opacity: 0.35
                         }

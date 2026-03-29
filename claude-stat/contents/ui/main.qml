@@ -85,6 +85,9 @@ PlasmoidItem {
     // ── Gemini CLI state ──
     property bool gcliLoading: false
     property string gcliAccount: ""
+    property string gcliTier: ""
+    property int gcliReqToday: 0
+    property int gcliReqLimit: 1000
     property int gcliActiveSessions: 0
     property int gcliTotalSessions: 0
     property int gcliPromptsToday: 0
@@ -104,13 +107,19 @@ PlasmoidItem {
     property var gcliActiveSessionsList: []
     property var gcliModelsUsed: ({})
 
-    // ── Gemini CLI realtime (I/O polling) ──
+    // ── Gemini CLI throughput & realtime ──
+    property real gcliRateOutput5m: 0
+    property real gcliRateOutput30m: 0
+    property real gcliRateAll5m: 0
+    property real gcliRateAll30m: 0
     property var _gcliPids: []
     property var _gcliPrevRchar: ({})
     property real gcliInstantRate: 0
     property int _gcliIdleTicks: 0
     property int _gcliActiveSince: 0
     property real _gcliPeakBps: 10000
+    readonly property real gcliInstantAllRate: gcliInstantRate * (gcliRateAll5m > 0 ? gcliRateAll5m : gcliRateAll30m)
+    readonly property real gcliInstantOutputRate: gcliInstantRate * (gcliRateOutput5m > 0 ? gcliRateOutput5m : gcliRateOutput30m)
 
     // Tick counter for session countdown (only when popup open)
     property int tick: 0
@@ -366,6 +375,10 @@ PlasmoidItem {
 
     function updateGeminiCli(g) {
         gcliAccount = g.account || ""
+        gcliTier = g.tier || "Free"
+        var quota = g.quota || {}
+        gcliReqToday = quota.requests_today || 0
+        gcliReqLimit = quota.requests_limit || 1000
         gcliActiveSessions = (g.sessions || {}).active || 0
         gcliTotalSessions = (g.sessions || {}).total || 0
         gcliPromptsToday = (g.prompts || {}).today || 0
@@ -381,6 +394,12 @@ PlasmoidItem {
         gcliTokOutMonth = tm.output || 0
         gcliTokCachedMonth = tm.cached || 0
         gcliTokThoughtsMonth = tm.thoughts || 0
+        if (g.throughput) {
+            gcliRateOutput5m = g.throughput.rate_output_5m || 0
+            gcliRateOutput30m = g.throughput.rate_output_30m || 0
+            gcliRateAll5m = g.throughput.rate_all_5m || 0
+            gcliRateAll30m = g.throughput.rate_all_30m || 0
+        }
         gcliDailyTokens = g.daily_tokens || []
         gcliFineTokens = g.fine_tokens || []
         gcliRecentSessions = g.recent_sessions || []
