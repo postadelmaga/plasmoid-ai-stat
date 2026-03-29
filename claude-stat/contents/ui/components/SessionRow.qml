@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 
-import "../../code/anthropic.js" as Api
+import "../../code/formatters.js" as Api
 
 Rectangle {
     id: sessionRow

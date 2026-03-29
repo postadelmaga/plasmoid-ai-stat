@@ -4,7 +4,7 @@ import QtQuick.Controls as QQC2
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 
-import "../../code/anthropic.js" as Api
+import "../../code/formatters.js" as Api
 import "../charts"
 import "../components"
 

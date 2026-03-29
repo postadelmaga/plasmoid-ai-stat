@@ -7,7 +7,7 @@ import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 
-import "../code/anthropic.js" as Api
+import "../code/formatters.js" as Api
 import "tabs"
 import "charts"
 import "components"
@@ -70,7 +70,7 @@ PlasmoidItem {
     property double sessionInputUsed: 0
     property double sessionOutputUsed: 0
 
-    // ── Gemini state ──
+    // ── Gemini API state ──
     property bool geminiLoading: false
     property bool geminiOk: false
     property string geminiPlan: ""
@@ -81,6 +81,27 @@ PlasmoidItem {
     property double geminiTokRemaining: 0
     property var geminiModels: []
     property bool geminiRateLimited: false
+
+    // ── Gemini CLI state ──
+    property bool gcliLoading: false
+    property string gcliAccount: ""
+    property int gcliActiveSessions: 0
+    property int gcliTotalSessions: 0
+    property int gcliPromptsToday: 0
+    property int gcliPromptsWeek: 0
+    property int gcliPromptsMonth: 0
+    property double gcliTokInToday: 0
+    property double gcliTokOutToday: 0
+    property double gcliTokInWeek: 0
+    property double gcliTokOutWeek: 0
+    property double gcliTokInMonth: 0
+    property double gcliTokOutMonth: 0
+    property double gcliTokCachedMonth: 0
+    property double gcliTokThoughtsMonth: 0
+    property var gcliDailyTokens: []
+    property var gcliFineTokens: []
+    property var gcliRecentSessions: []
+    property var gcliModelsUsed: ({})
 
     // Tick counter for session countdown (only when popup open)
     property int tick: 0
@@ -101,7 +122,10 @@ PlasmoidItem {
         connectedSources: []
         onNewData: (source, data) => {
             var stdout = data.stdout.trim()
-            if (source.indexOf("gemini") >= 0) {
+            if (source.indexOf("gemini_local_stats") >= 0) {
+                if (stdout) { try { updateGeminiCli(JSON.parse(stdout)) } catch(e) { console.log("GeminiCLI parse error:", e) } }
+                gcliLoading = false
+            } else if (source.indexOf("gemini") >= 0) {
                 if (stdout) { try { updateGemini(JSON.parse(stdout)) } catch(e) { console.log("Gemini parse error:", e) } }
                 geminiLoading = false
             } else {
@@ -246,6 +270,10 @@ PlasmoidItem {
             var geminiScript = Qt.resolvedUrl("../code/gemini_stats.py").toString().replace("file://", "")
             executable.connectSource("python3 " + geminiScript + " " + geminiApiKey)
         }
+
+        gcliLoading = true
+        var gcliScript = Qt.resolvedUrl("../code/gemini_local_stats.py").toString().replace("file://", "")
+        executable.connectSource("python3 " + gcliScript)
     }
 
     function updateClaude(s) {
@@ -320,6 +348,29 @@ PlasmoidItem {
         geminiTokLimit = rl["x-ratelimit-limit-tokens"] || 0
         geminiTokRemaining = rl["x-ratelimit-remaining-tokens"] || 0
         geminiModels = g.models || []
+    }
+
+    function updateGeminiCli(g) {
+        gcliAccount = g.account || ""
+        gcliActiveSessions = (g.sessions || {}).active || 0
+        gcliTotalSessions = (g.sessions || {}).total || 0
+        gcliPromptsToday = (g.prompts || {}).today || 0
+        gcliPromptsWeek = (g.prompts || {}).week || 0
+        gcliPromptsMonth = (g.prompts || {}).month || 0
+        var t = g.tokens || {}
+        var td = t.today || {}; var tw = t.week || {}; var tm = t.month || {}
+        gcliTokInToday = (td.input || 0) + (td.cached || 0) + (td.thoughts || 0) + (td.tool || 0)
+        gcliTokOutToday = td.output || 0
+        gcliTokInWeek = (tw.input || 0) + (tw.cached || 0) + (tw.thoughts || 0) + (tw.tool || 0)
+        gcliTokOutWeek = tw.output || 0
+        gcliTokInMonth = (tm.input || 0) + (tm.cached || 0) + (tm.thoughts || 0) + (tm.tool || 0)
+        gcliTokOutMonth = tm.output || 0
+        gcliTokCachedMonth = tm.cached || 0
+        gcliTokThoughtsMonth = tm.thoughts || 0
+        gcliDailyTokens = g.daily_tokens || []
+        gcliFineTokens = g.fine_tokens || []
+        gcliRecentSessions = g.recent_sessions || []
+        gcliModelsUsed = g.models_used || {}
     }
 
     // ─── Compact Representation ───
@@ -474,7 +525,11 @@ PlasmoidItem {
                     Kirigami.Theme.inherit: false
                 }
                 QQC2.TabButton {
-                    text: "Gemini"
+                    text: "Gemini CLI"
+                    icon.name: "akonadiconsole"
+                }
+                QQC2.TabButton {
+                    text: "Gemini API"
                     icon.name: "applications-science"
                     enabled: root.geminiApiKey !== ""
                     opacity: root.geminiApiKey !== "" ? 1.0 : 0.4
@@ -487,6 +542,7 @@ PlasmoidItem {
                 currentIndex: tabBar.currentIndex
 
                 ClaudeTab { appRoot: root }
+                GeminiCliTab { appRoot: root }
                 GeminiTab { appRoot: root }
             }
         }

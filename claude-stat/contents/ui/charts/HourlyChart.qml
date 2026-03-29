@@ -2,7 +2,7 @@ import QtQuick
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents
 
-import "../../code/anthropic.js" as Api
+import "../../code/formatters.js" as Api
 
 Canvas {
     id: chart
