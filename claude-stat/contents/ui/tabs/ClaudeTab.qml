@@ -81,62 +81,78 @@ Flickable {
             }
         }
 
-        // Throughput
-        ColumnLayout {
-            Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
-
-            SectionHeader { text: i18n("Throughput") }
-
-            // Main gauge (outer): all tokens incl. cache (quota burn rate)
-            // Inner ring (thin): output only (Claude's generated text)
-            Tachometer {
-                Layout.preferredWidth: appRoot.onDesktop ? Kirigami.Units.gridUnit * 10 : Kirigami.Units.gridUnit * 8
-                Layout.preferredHeight: Layout.preferredWidth * 0.72
-                Layout.alignment: Qt.AlignHCenter
-                value: appRoot.instantAllRate
-                avgValue: appRoot.rateAll30m
-                maxValue: 300000000   // 300M tok/h — quota burn scale
-                label: i18n("tok/h")
-                // Inner ring: output only (actual generated text)
-                innerValue: appRoot.instantOutputRate
-                innerMaxValue: 500000  // 500K tok/h output scale
-            }
-        }
-
-        // Token History (12h)
-        Item {
-            visible: appRoot.fineTokens.length > 0; Layout.fillWidth: true
-            Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
-            Layout.margins: Kirigami.Units.smallSpacing
-            ColumnLayout {
-                anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
-                SectionHeader { text: i18n("12h") }
-                HourlyChart { Layout.fillWidth: true; Layout.fillHeight: true; rawData: appRoot.fineTokens; bucketMinutes: 5 }
-            }
-        }
-
-        // Session Quota
+        // ── Dashboard: Session Ring | Tachometer | Daily Ring ──
         ColumnLayout {
             visible: appRoot.hasLimits && appRoot.sessionInputLimit > 0
             Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing
             spacing: Kirigami.Units.smallSpacing
 
-            SectionHeader { text: i18n("Session %1/%2", appRoot.sessionNumber, appRoot.sessionTotal) }
+            Item {
+                Layout.fillWidth: true
+                property real _ringSize: Kirigami.Units.gridUnit * 6
+                property real _tachoW: appRoot.onDesktop ? Kirigami.Units.gridUnit * 10 : Kirigami.Units.gridUnit * 8
+                implicitHeight: dashRow.implicitHeight
 
-            Row {
-                Layout.alignment: Qt.AlignHCenter; spacing: Kirigami.Units.largeSpacing
-                QuotaRing {
-                    ringWidth: Kirigami.Units.gridUnit * 6; ringHeight: Kirigami.Units.gridUnit * 6
-                    used: appRoot.sessionInputUsed; limit: appRoot.sessionInputLimit; label: "input"
-                    ringColor: pct > 0.9 ? Kirigami.Theme.negativeTextColor : pct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
-                }
-                QuotaRing {
-                    ringWidth: Kirigami.Units.gridUnit * 6; ringHeight: Kirigami.Units.gridUnit * 6
-                    used: appRoot.sessionOutputUsed; limit: appRoot.sessionOutputLimit; label: "output"
-                    ringColor: pct > 0.9 ? Kirigami.Theme.negativeTextColor : pct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor
+                Row {
+                    id: dashRow
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: Kirigami.Units.smallSpacing
+
+                    // Session ring (left)
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+                        DualQuotaRing {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: dashRow.parent._ringSize; height: dashRow.parent._ringSize
+                            outerUsed: appRoot.sessionInputUsed; outerLimit: appRoot.sessionInputLimit; outerLabel: "in"
+                            outerColor: outerPct > 0.9 ? Kirigami.Theme.negativeTextColor : outerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
+                            innerUsed: appRoot.sessionOutputUsed; innerLimit: appRoot.sessionOutputLimit; innerLabel: "out"
+                            innerColor: innerPct > 0.9 ? Kirigami.Theme.negativeTextColor : innerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor
+                        }
+                        PlasmaComponents.Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: i18n("Session %1/%2", appRoot.sessionNumber, appRoot.sessionTotal)
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
+                            opacity: 0.35
+                        }
+                    }
+
+                    // Tachometer (center)
+                    Tachometer {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: dashRow.parent._tachoW; height: dashRow.parent._tachoW * 0.72
+                        value: appRoot.instantAllRate
+                        avgValue: appRoot.rateAll30m
+                        maxValue: 300000000
+                        label: i18n("tok/h")
+                        innerValue: appRoot.instantOutputRate
+                        innerMaxValue: 500000
+                    }
+
+                    // Daily ring (right)
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+                        DualQuotaRing {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: dashRow.parent._ringSize; height: dashRow.parent._ringSize
+                            outerUsed: appRoot.tokInToday; outerLimit: appRoot.limInTokPerDay; outerLabel: "in"
+                            outerColor: outerPct > 0.9 ? Kirigami.Theme.negativeTextColor : outerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
+                            innerUsed: appRoot.tokOutToday; innerLimit: appRoot.limOutTokPerDay; innerLabel: "out"
+                            innerColor: innerPct > 0.9 ? Kirigami.Theme.negativeTextColor : innerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor
+                        }
+                        PlasmaComponents.Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: i18n("Daily")
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
+                            opacity: 0.35
+                        }
+                    }
                 }
             }
 
+            // Session countdown
             PlasmaComponents.Label {
                 text: {
                     var _t = appRoot.tick;
@@ -152,14 +168,34 @@ Flickable {
                 opacity: 0.4
                 Layout.alignment: Qt.AlignHCenter
             }
+        }
 
-            PlasmaComponents.Label {
-                text: i18n("Daily: %1 / %2 input \u00b7 %3 / %4 output",
-                    Api.formatTokens(appRoot.tokInToday), Api.formatTokens(appRoot.limInTokPerDay),
-                    Api.formatTokens(appRoot.tokOutToday), Api.formatTokens(appRoot.limOutTokPerDay))
-                font.pointSize: Kirigami.Theme.smallFont.pointSize * 1.05
-                opacity: 0.3
+        // Throughput only (fallback when no limits/session data)
+        ColumnLayout {
+            visible: !(appRoot.hasLimits && appRoot.sessionInputLimit > 0)
+            Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
+            Tachometer {
+                Layout.preferredWidth: appRoot.onDesktop ? Kirigami.Units.gridUnit * 10 : Kirigami.Units.gridUnit * 8
+                Layout.preferredHeight: Layout.preferredWidth * 0.72
                 Layout.alignment: Qt.AlignHCenter
+                value: appRoot.instantAllRate
+                avgValue: appRoot.rateAll30m
+                maxValue: 300000000
+                label: i18n("tok/h")
+                innerValue: appRoot.instantOutputRate
+                innerMaxValue: 500000
+            }
+        }
+
+        // Token History (12h)
+        Item {
+            visible: appRoot.fineTokens.length > 0; Layout.fillWidth: true
+            Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
+            Layout.margins: Kirigami.Units.smallSpacing
+            ColumnLayout {
+                anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
+                SectionHeader { text: i18n("12h") }
+                HourlyChart { Layout.fillWidth: true; Layout.fillHeight: true; rawData: appRoot.fineTokens; bucketMinutes: 5 }
             }
         }
 

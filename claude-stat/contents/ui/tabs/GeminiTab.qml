@@ -66,18 +66,13 @@ Flickable {
         ColumnLayout {
             visible: appRoot.geminiOk; Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
             SectionHeader { text: i18n("Rate Limits") }
-            Row {
-                Layout.alignment: Qt.AlignHCenter; spacing: Kirigami.Units.largeSpacing
-                QuotaRing {
-                    ringWidth: Kirigami.Units.gridUnit * 6; ringHeight: Kirigami.Units.gridUnit * 6
-                    used: appRoot.geminiReqLimit - appRoot.geminiReqRemaining; limit: appRoot.geminiReqLimit; label: "requests"
-                    ringColor: pct > 0.9 ? Kirigami.Theme.negativeTextColor : pct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
-                }
-                QuotaRing {
-                    ringWidth: Kirigami.Units.gridUnit * 6; ringHeight: Kirigami.Units.gridUnit * 6
-                    used: appRoot.geminiTokLimit - appRoot.geminiTokRemaining; limit: appRoot.geminiTokLimit; label: "tokens"
-                    ringColor: pct > 0.9 ? Kirigami.Theme.negativeTextColor : pct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor
-                }
+            DualQuotaRing {
+                Layout.alignment: Qt.AlignHCenter
+                width: Kirigami.Units.gridUnit * 8; height: Kirigami.Units.gridUnit * 8
+                outerUsed: appRoot.geminiReqLimit - appRoot.geminiReqRemaining; outerLimit: appRoot.geminiReqLimit; outerLabel: "req"
+                outerColor: outerPct > 0.9 ? Kirigami.Theme.negativeTextColor : outerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
+                innerUsed: appRoot.geminiTokLimit - appRoot.geminiTokRemaining; innerLimit: appRoot.geminiTokLimit; innerLabel: "tok"
+                innerColor: innerPct > 0.9 ? Kirigami.Theme.negativeTextColor : innerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor
             }
         }
 

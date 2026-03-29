@@ -8,11 +8,11 @@ import "../../code/anthropic.js" as Api
 Canvas {
     id: pie
 
-    property int inputTokens: 0
-    property int outputTokens: 0
-    property int cacheTokens: 0
+    property double inputTokens: 0
+    property double outputTokens: 0
+    property double cacheTokens: 0
 
-    property int total: inputTokens + outputTokens + cacheTokens
+    property double total: inputTokens + outputTokens + cacheTokens
 
     onInputTokensChanged: requestPaint()
     onOutputTokensChanged: requestPaint()

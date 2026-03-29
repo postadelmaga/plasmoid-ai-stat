@@ -35,16 +35,16 @@ PlasmoidItem {
     property int promptsWeek: 0
     property int promptsMonth: 0
     property bool hasLimits: false
-    property int limInTokPerDay: 0
-    property int limOutTokPerDay: 0
-    property int tokInToday: 0
-    property int tokOutToday: 0
-    property int tokCacheReadToday: 0
-    property int tokCacheCreateToday: 0
-    property int tokInWeek: 0
-    property int tokOutWeek: 0
-    property int tokInMonth: 0
-    property int tokOutMonth: 0
+    property double limInTokPerDay: 0
+    property double limOutTokPerDay: 0
+    property double tokInToday: 0
+    property double tokOutToday: 0
+    property double tokCacheReadToday: 0
+    property double tokCacheCreateToday: 0
+    property double tokInWeek: 0
+    property double tokOutWeek: 0
+    property double tokInMonth: 0
+    property double tokOutMonth: 0
     property double estCostWeek: 0
     property double estCostTotal: 0
     property var dailyTokens: []
@@ -62,20 +62,20 @@ PlasmoidItem {
     property int sessionNumber: 0
     property int sessionTotal: 5
     property double sessionEndTs: 0
-    property int sessionInputLimit: 0
-    property int sessionOutputLimit: 0
-    property int sessionInputUsed: 0
-    property int sessionOutputUsed: 0
+    property double sessionInputLimit: 0
+    property double sessionOutputLimit: 0
+    property double sessionInputUsed: 0
+    property double sessionOutputUsed: 0
 
     // ── Gemini state ──
     property bool geminiLoading: false
     property bool geminiOk: false
     property string geminiPlan: ""
     property string geminiError: ""
-    property int geminiReqLimit: 0
-    property int geminiReqRemaining: 0
-    property int geminiTokLimit: 0
-    property int geminiTokRemaining: 0
+    property double geminiReqLimit: 0
+    property double geminiReqRemaining: 0
+    property double geminiTokLimit: 0
+    property double geminiTokRemaining: 0
     property var geminiModels: []
     property bool geminiRateLimited: false
 

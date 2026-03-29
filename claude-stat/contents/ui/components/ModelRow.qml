@@ -9,10 +9,10 @@ ColumnLayout {
     id: modelRow
 
     property string modelName: ""
-    property int inputTokens: 0
-    property int outputTokens: 0
+    property double inputTokens: 0
+    property double outputTokens: 0
     property double cost: 0
-    property int maxTokens: 1
+    property double maxTokens: 1
 
     spacing: 2
 

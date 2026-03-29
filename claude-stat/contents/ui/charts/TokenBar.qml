@@ -9,8 +9,8 @@ RowLayout {
     id: tokenBar
 
     property string label: ""
-    property int value: 0
-    property int maxValue: 1
+    property double value: 0
+    property double maxValue: 1
     property color barColor: Kirigami.Theme.highlightColor
 
     spacing: Kirigami.Units.smallSpacing

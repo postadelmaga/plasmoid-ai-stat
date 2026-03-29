@@ -8,8 +8,8 @@ import "../../code/anthropic.js" as Api
 Item {
     id: quotaRing
 
-    property int used: 0
-    property int limit: 1
+    property double used: 0
+    property double limit: 1
     property string label: ""
     property color ringColor: Kirigami.Theme.highlightColor
 
