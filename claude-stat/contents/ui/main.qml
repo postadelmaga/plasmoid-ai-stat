@@ -101,7 +101,16 @@ PlasmoidItem {
     property var gcliDailyTokens: []
     property var gcliFineTokens: []
     property var gcliRecentSessions: []
+    property var gcliActiveSessionsList: []
     property var gcliModelsUsed: ({})
+
+    // ── Gemini CLI realtime (I/O polling) ──
+    property var _gcliPids: []
+    property var _gcliPrevRchar: ({})
+    property real gcliInstantRate: 0
+    property int _gcliIdleTicks: 0
+    property int _gcliActiveSince: 0
+    property real _gcliPeakBps: 10000
 
     // Tick counter for session countdown (only when popup open)
     property int tick: 0
@@ -164,9 +173,17 @@ PlasmoidItem {
             if (!stdout) { disconnectSource(source); return }
 
             // Parse grep output: "/proc/PID/io:rchar: VALUE"
+            // Split by Claude vs Gemini PIDs
             var lines = stdout.split("\n")
-            var maxBps = 0
-            var hasPrev = false
+            var claudeMaxBps = 0, gcliMaxBps = 0
+            var claudeHasPrev = false, gcliHasPrev = false
+
+            // Build PID lookup sets
+            var claudePidSet = {}
+            for (var ci = 0; ci < root._sessionPids.length; ci++) claudePidSet[root._sessionPids[ci]] = true
+            var gcliPidSet = {}
+            for (var gi = 0; gi < root._gcliPids.length; gi++) gcliPidSet[root._gcliPids[gi]] = true
+
             for (var i = 0; i < lines.length; i++) {
                 var line = lines[i]
                 var pidStart = line.indexOf("/proc/") + 6
@@ -175,75 +192,72 @@ PlasmoidItem {
                 var pid = line.substring(pidStart, pidEnd)
                 var rchar = parseInt(line.substring(line.lastIndexOf(" ") + 1))
                 if (isNaN(rchar)) continue
-                var prev = root._prevRchar[pid] || 0
+
+                var isClaude = claudePidSet[pid] || false
+                var isGcli = gcliPidSet[pid] || false
+                var prevMap = isClaude ? root._prevRchar : root._gcliPrevRchar
+                var prev = prevMap[pid] || 0
+
                 if (prev > 0) {
-                    var bps = (rchar - prev)  // tick = 1s
-                    if (bps > maxBps) maxBps = bps
-                    hasPrev = true
+                    var bps = (rchar - prev)
+                    if (isClaude) { if (bps > claudeMaxBps) claudeMaxBps = bps; claudeHasPrev = true }
+                    if (isGcli) { if (bps > gcliMaxBps) gcliMaxBps = bps; gcliHasPrev = true }
                 }
-                root._prevRchar[pid] = rchar
+                prevMap[pid] = rchar
             }
-            if (!hasPrev) { disconnectSource(source); return }
 
-            root._lastMaxBps = maxBps
+            // Update Claude rate
+            if (claudeHasPrev) _updateRate(claudeMaxBps, "_activeSince", "_idleTicks", "_peakBps", "instantRate")
+            else if (root._sessionPids.length === 0) { root.instantRate = 0 }
 
-            // Detect streaming: check if ANY single session has high I/O
-            // Idle heartbeat: ~100-500 bps per session
-            // User typing in terminal: ~500-2000 bps
-            // API streaming: ~3000-50000+ bps
-            var isActive = (maxBps > 2500)
+            // Update Gemini CLI rate
+            if (gcliHasPrev) _updateRate(gcliMaxBps, "_gcliActiveSince", "_gcliIdleTicks", "_gcliPeakBps", "gcliInstantRate")
+            else if (root._gcliPids.length === 0) { root.gcliInstantRate = 0 }
 
-            // Smoothing: once active, hold for 3 ticks (3s @ 1s)
-            if (isActive) root._activeSince = 3
-            else if (root._activeSince > 0) root._activeSince--
-            var smoothedActive = root._activeSince > 0
-
-            if (smoothedActive) {
-                root._idleTicks = 0
-
-                // Adaptive peak: instant rise on new highs, slow decay (0.5%/tick)
-                if (maxBps > root._peakBps)
-                    root._peakBps = maxBps
-                else
-                    root._peakBps = Math.max(5000, root._peakBps * 0.995)
-
-                // Proportional: scale against observed peak
-                var intensity = Math.min(1.0, Math.max(0.05, (maxBps - 2500) / (root._peakBps - 2500)))
-                // Fast attack: jump toward target with strong lerp
-                var target = 0.15 + intensity * 0.85
-                if (root.instantRate < 0.2)
-                    root.instantRate = target * 0.8  // initial kick
-                else
-                    root.instantRate += (target - root.instantRate) * 0.6
-            } else {
-                root._idleTicks++
-                if (root._idleTicks <= 1) {
-                    // 0-1s: hold briefly
-                } else {
-                    // Gradual decay — falls like a real needle with inertia
-                    root.instantRate *= 0.45
-                    if (root.instantRate < 0.01) root.instantRate = 0
-                }
-            }
             disconnectSource(source)
+        }
+    }
+
+    function _updateRate(maxBps, activeSinceProp, idleTicksProp, peakBpsProp, rateProp) {
+        var isActive = (maxBps > 2500)
+
+        if (isActive) root[activeSinceProp] = 3
+        else if (root[activeSinceProp] > 0) root[activeSinceProp]--
+        var smoothedActive = root[activeSinceProp] > 0
+
+        if (smoothedActive) {
+            root[idleTicksProp] = 0
+            if (maxBps > root[peakBpsProp]) root[peakBpsProp] = maxBps
+            else root[peakBpsProp] = Math.max(5000, root[peakBpsProp] * 0.995)
+            var intensity = Math.min(1.0, Math.max(0.05, (maxBps - 2500) / (root[peakBpsProp] - 2500)))
+            var target = 0.15 + intensity * 0.85
+            if (root[rateProp] < 0.2) root[rateProp] = target * 0.8
+            else root[rateProp] += (target - root[rateProp]) * 0.6
+        } else {
+            root[idleTicksProp]++
+            if (root[idleTicksProp] > 1) {
+                root[rateProp] *= 0.45
+                if (root[rateProp] < 0.01) root[rateProp] = 0
+            }
         }
     }
 
     property int _pollSeq: 0
     property bool _pollPending: false
+    property bool _hasAnyPids: root._sessionPids.length > 0 || root._gcliPids.length > 0
     Timer {
         interval: 1000
-        // Poll when popup is open, desktop widget, OR compact tacho mode needs live data
-        running: root.activeSessions > 0 && root._sessionPids.length > 0 && (root.expanded || root.onDesktop || root.compactStyle === "tacho")
+        running: root._hasAnyPids && (root.expanded || root.onDesktop || root.compactStyle === "tacho")
         repeat: true
         onTriggered: {
-            if (root._pollPending) return  // don't stack requests
+            if (root._pollPending) return
+            var allPids = root._sessionPids.concat(root._gcliPids)
+            if (allPids.length === 0) return
             root._pollPending = true
-            // Alternate between 2 strings to force re-execution without unbounded accumulation
             root._pollSeq = 1 - root._pollSeq
             var cmd = "grep -H ^rchar:"
-            for (var i = 0; i < root._sessionPids.length; i++)
-                cmd += " /proc/" + root._sessionPids[i] + "/io"
+            for (var i = 0; i < allPids.length; i++)
+                cmd += " /proc/" + allPids[i] + "/io"
             cmd += " 2>/dev/null #" + root._pollSeq
             ioSource.connectSource(cmd)
         }
@@ -251,7 +265,7 @@ PlasmoidItem {
 
     // ── Timers ──
     Timer {
-        interval: root.activeSessions > 0 ? 30000 : root.refreshInterval * 1000
+        interval: (root.activeSessions > 0 || root.gcliActiveSessions > 0) ? 30000 : root.refreshInterval * 1000
         running: true; repeat: true; triggeredOnStart: true
         onTriggered: refreshAll()
     }
@@ -370,7 +384,23 @@ PlasmoidItem {
         gcliDailyTokens = g.daily_tokens || []
         gcliFineTokens = g.fine_tokens || []
         gcliRecentSessions = g.recent_sessions || []
+        gcliActiveSessionsList = g.active_sessions || []
         gcliModelsUsed = g.models_used || {}
+
+        // Extract PIDs for I/O polling
+        var pids = []
+        var sessions = g.active_sessions || []
+        for (var i = 0; i < sessions.length; i++) {
+            if (sessions[i].pid) pids.push(String(sessions[i].pid))
+        }
+        var pidsChanged = pids.length !== _gcliPids.length
+        if (!pidsChanged) {
+            for (var j = 0; j < pids.length; j++) {
+                if (pids[j] !== _gcliPids[j]) { pidsChanged = true; break }
+            }
+        }
+        _gcliPids = pids
+        if (pidsChanged) _gcliPrevRchar = {}
     }
 
     // ─── Compact Representation ───

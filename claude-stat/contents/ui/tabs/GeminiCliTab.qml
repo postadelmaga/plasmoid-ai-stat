@@ -37,11 +37,15 @@ Flickable {
             }
             Item { Layout.fillWidth: true }
 
-            PlasmaComponents.Label {
-                visible: appRoot.gcliTotalSessions > 0
-                text: appRoot.gcliTotalSessions + " sessions"
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                opacity: 0.4
+            RowLayout {
+                visible: appRoot.gcliActiveSessions > 0
+                spacing: Kirigami.Units.smallSpacing / 2
+                Rectangle { width: 7; height: 7; radius: 3.5; color: Kirigami.Theme.positiveTextColor }
+                PlasmaComponents.Label {
+                    text: appRoot.gcliActiveSessions + " active"
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    color: Kirigami.Theme.positiveTextColor; opacity: 0.7
+                }
             }
 
             QQC2.BusyIndicator {
@@ -65,33 +69,83 @@ Flickable {
             }
         }
 
-        // Token Stats
+        // ── Dashboard: Today Ring | Tachometer | Week Ring ──
         ColumnLayout {
-            Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
-            SectionHeader { text: i18n("Tokens") }
-            GridLayout {
+            Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
+
+            Item {
                 Layout.fillWidth: true
-                columns: 2; columnSpacing: Kirigami.Units.smallSpacing; rowSpacing: Kirigami.Units.smallSpacing
-                StatCard {
-                    label: i18n("Today In"); value: Api.formatTokens(appRoot.gcliTokInToday)
-                    accent: Kirigami.Theme.highlightColor; Layout.fillWidth: true
-                }
-                StatCard {
-                    label: i18n("Today Out"); value: Api.formatTokens(appRoot.gcliTokOutToday)
-                    accent: Kirigami.Theme.positiveTextColor; Layout.fillWidth: true
-                }
-                StatCard {
-                    label: i18n("Week In"); value: Api.formatTokens(appRoot.gcliTokInWeek)
-                    accent: Kirigami.Theme.highlightColor; Layout.fillWidth: true
-                }
-                StatCard {
-                    label: i18n("Week Out"); value: Api.formatTokens(appRoot.gcliTokOutWeek)
-                    accent: Kirigami.Theme.positiveTextColor; Layout.fillWidth: true
+                property real _ringSize: Kirigami.Units.gridUnit * 6
+                property real _tachoW: appRoot.onDesktop ? Kirigami.Units.gridUnit * 10 : Kirigami.Units.gridUnit * 8
+                implicitHeight: gcliDashRow.implicitHeight
+
+                Row {
+                    id: gcliDashRow
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: Kirigami.Units.smallSpacing
+
+                    // Today ring (left)
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+                        DualQuotaRing {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: gcliDashRow.parent._ringSize; height: gcliDashRow.parent._ringSize
+                            outerUsed: appRoot.gcliTokInToday
+                            outerLimit: Math.max(appRoot.gcliTokInMonth / 7, appRoot.gcliTokInToday * 1.2, 1)
+                            outerLabel: "in"
+                            outerColor: Kirigami.Theme.highlightColor
+                            innerUsed: appRoot.gcliTokOutToday
+                            innerLimit: Math.max(appRoot.gcliTokOutMonth / 7, appRoot.gcliTokOutToday * 1.2, 1)
+                            innerLabel: "out"
+                            innerColor: Kirigami.Theme.positiveTextColor
+                        }
+                        PlasmaComponents.Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: i18n("Today")
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
+                            opacity: 0.35
+                        }
+                    }
+
+                    // Tachometer (center)
+                    Tachometer {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: gcliDashRow.parent._tachoW; height: gcliDashRow.parent._tachoW * 0.72
+                        value: appRoot.gcliInstantRate
+                        maxValue: 1.0
+                        label: i18n("activity")
+                    }
+
+                    // Week ring (right)
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 2
+                        DualQuotaRing {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: gcliDashRow.parent._ringSize; height: gcliDashRow.parent._ringSize
+                            outerUsed: appRoot.gcliTokInWeek
+                            outerLimit: Math.max(appRoot.gcliTokInMonth, appRoot.gcliTokInWeek * 1.2, 1)
+                            outerLabel: "in"
+                            outerColor: Kirigami.Theme.highlightColor
+                            innerUsed: appRoot.gcliTokOutWeek
+                            innerLimit: Math.max(appRoot.gcliTokOutMonth, appRoot.gcliTokOutWeek * 1.2, 1)
+                            innerLabel: "out"
+                            innerColor: Kirigami.Theme.positiveTextColor
+                        }
+                        PlasmaComponents.Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: i18n("Week")
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
+                            opacity: 0.35
+                        }
+                    }
                 }
             }
         }
 
-        // 12h Chart
+        // Token History (12h)
         Item {
             visible: appRoot.gcliFineTokens.length > 0; Layout.fillWidth: true
             Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
