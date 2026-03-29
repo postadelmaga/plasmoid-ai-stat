@@ -228,7 +228,7 @@ PlasmoidItem {
     }
 
     function _updateRate(maxBps, activeSinceProp, idleTicksProp, peakBpsProp, rateProp) {
-        var isActive = (maxBps > 2500)
+        var isActive = (maxBps > 1000)
 
         if (isActive) root[activeSinceProp] = 3
         else if (root[activeSinceProp] > 0) root[activeSinceProp]--
@@ -237,8 +237,8 @@ PlasmoidItem {
         if (smoothedActive) {
             root[idleTicksProp] = 0
             if (maxBps > root[peakBpsProp]) root[peakBpsProp] = maxBps
-            else root[peakBpsProp] = Math.max(5000, root[peakBpsProp] * 0.995)
-            var intensity = Math.min(1.0, Math.max(0.05, (maxBps - 2500) / (root[peakBpsProp] - 2500)))
+            else root[peakBpsProp] = Math.max(10000, root[peakBpsProp] * 0.995)
+            var intensity = Math.min(1.0, Math.max(0.05, (maxBps - 1000) / (root[peakBpsProp] - 100)))
             var target = 0.15 + intensity * 0.85
             if (root[rateProp] < 0.2) root[rateProp] = target * 0.8
             else root[rateProp] += (target - root[rateProp]) * 0.6
