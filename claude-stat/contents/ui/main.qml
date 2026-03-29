@@ -27,7 +27,7 @@ PlasmoidItem {
     property bool onDesktop: Plasmoid.formFactor === 0
     preferredRepresentation: onDesktop ? fullRepresentation : compactRepresentation
 
-    Plasmoid.backgroundHints: PlasmaCore.Types.DefaultBackground | PlasmaCore.Types.ShadowBackground
+    Plasmoid.backgroundHints: PlasmaCore.Types.StandardBackground | PlasmaCore.Types.ShadowBackground
 
     // ── Claude state ──
     property bool loading: false
@@ -452,6 +452,10 @@ PlasmoidItem {
         Layout.fillWidth: root.onDesktop
         Layout.fillHeight: root.onDesktop
 
+        Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+        Kirigami.Theme.inherit: false
+
+
         ColumnLayout {
             anchors.fill: parent
             spacing: 0
@@ -459,10 +463,15 @@ PlasmoidItem {
             QQC2.TabBar {
                 id: tabBar
                 Layout.fillWidth: true
+                // QQC2 breeze style hardcodes Header colorSet — override it
+                Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                Kirigami.Theme.inherit: false
 
                 QQC2.TabButton {
                     text: "Claude"
                     icon.name: "preferences-system-performance"
+                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                    Kirigami.Theme.inherit: false
                 }
                 QQC2.TabButton {
                     text: "Gemini"

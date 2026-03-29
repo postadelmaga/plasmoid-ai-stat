@@ -34,30 +34,14 @@ Rectangle {
             Layout.bottomMargin: 1
         }
 
-        // Value with glow (Rectangle is much cheaper than Canvas)
-        Item {
+        PlasmaComponents.Label {
+            id: valueLabel
             Layout.alignment: Qt.AlignHCenter
-            implicitWidth: valueLabel.implicitWidth + 16
-            implicitHeight: valueLabel.implicitHeight + 8
-
-            Rectangle {
-                anchors.centerIn: parent
-                width: parent.width * 1.2; height: parent.height * 1.2
-                radius: width / 2
-                visible: card.value !== "0"
-                color: Qt.rgba(card.accent.r, card.accent.g, card.accent.b, 0.12)
-                opacity: 0.6
-            }
-
-            PlasmaComponents.Label {
-                id: valueLabel
-                anchors.centerIn: parent
-                text: card.value
-                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.6
-                font.weight: Font.Bold
-                color: card.accent
-                horizontalAlignment: Text.AlignHCenter
-            }
+            text: card.value
+            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.6
+            font.weight: Font.Bold
+            color: card.accent
+            horizontalAlignment: Text.AlignHCenter
         }
 
         // Sub label
