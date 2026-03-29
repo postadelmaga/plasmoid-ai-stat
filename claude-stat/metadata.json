@@ -1,0 +1,19 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "claude-stat",
+        "Name": "Claude Stat",
+        "Description": "Real-time Anthropic Claude API usage, token quotas and cost dashboard",
+        "Icon": "preferences-system-performance",
+        "Authors": [
+            {
+                "Name": "Fra",
+                "Email": "postadelmaga@gmail.com"
+            }
+        ],
+        "Category": "System Information",
+        "Version": "1.0.0",
+        "License": "GPL-3.0+"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

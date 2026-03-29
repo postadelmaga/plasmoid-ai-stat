@@ -1,0 +1,16 @@
+# Build artifacts
+*.plasmoid
+
+# Python
+__pycache__/
+*.pyc
+
+# Claude Code internals
+.claude/
+.agents/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
