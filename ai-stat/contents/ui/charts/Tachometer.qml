@@ -111,7 +111,8 @@ Item {
             ctx.fillStyle = Qt.rgba(tc.r, tc.g, tc.b, 0.25); ctx.textAlign = "center"
             var l0r = r - lw / 2 - 16
             ctx.fillText("0", cx + l0r * Math.cos(startA), cy + l0r * Math.sin(startA) + labelSize / 2)
-            ctx.fillText(Api.formatTokens(tacho.maxValue), cx + l0r * Math.cos(startA + sweepA), cy + l0r * Math.sin(startA + sweepA) + labelSize / 2)
+            var maxLabel = tacho.maxValue <= 1.0 ? "100%" : Api.formatTokens(tacho.maxValue)
+            ctx.fillText(maxLabel, cx + l0r * Math.cos(startA + sweepA), cy + l0r * Math.sin(startA + sweepA) + labelSize / 2)
 
             // Inner concentric ring track (static part)
             if (tacho.innerMaxValue > 0) {
@@ -288,7 +289,7 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: labelText.top
         anchors.bottomMargin: 1
-        text: Api.formatTokens(Math.round(tacho.value))
+        text: tacho.maxValue <= 1.0 ? Math.round(tacho.value * 100) + "%" : Api.formatTokens(Math.round(tacho.value))
         font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1
         font.weight: Font.Bold
         color: tacho.needleColor

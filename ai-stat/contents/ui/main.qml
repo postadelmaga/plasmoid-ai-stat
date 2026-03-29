@@ -121,6 +121,95 @@ PlasmoidItem {
     readonly property real gcliInstantAllRate: gcliInstantRate * (gcliRateAll5m > 0 ? gcliRateAll5m : gcliRateAll30m)
     readonly property real gcliInstantOutputRate: gcliInstantRate * (gcliRateOutput5m > 0 ? gcliRateOutput5m : gcliRateOutput30m)
 
+    // ── Antigravity state ──
+    property bool agLoading: false
+    property bool agOk: false
+    property string agPlan: ""
+    property string agEmail: ""
+    property double agPromptCredits: 0
+    property double agPromptCreditsMax: 0
+    property double agFlowCredits: 0
+    property double agFlowCreditsMax: 0
+    property double agTokInToday: 0
+    property double agTokOutToday: 0
+    property double agTokInWeek: 0
+    property double agTokOutWeek: 0
+    property double agTokInMonth: 0
+    property double agTokOutMonth: 0
+    property var agDailyTokens: []
+    property var agFineTokens: []
+    property var agRecentSessions: []
+    property var agModelsUsed: ({})
+    property var agModels: []
+    property int agPid: 0
+
+    // ── Antigravity throughput & realtime ──
+    property real agRateAll5m: 0
+    property real agRateAll30m: 0
+    property real agRateOutput5m: 0
+    property real agRateOutput30m: 0
+    property real agInstantRate: 0
+    readonly property real agInstantAllRate: agInstantRate * (agRateAll5m > 0 ? agRateAll5m : agRateAll30m)
+    readonly property real agInstantOutputRate: agInstantRate * (agRateOutput5m > 0 ? agRateOutput5m : agRateOutput30m)
+    property bool _agPollPending: false
+    property string _agPort: ""
+    property string _agCsrf: ""
+    property int _agPrevSteps: 0
+
+    Plasma5Support.DataSource {
+        id: agPollSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: (source, data) => {
+            root._agPollPending = false
+            var stdout = data.stdout.trim()
+            if (!stdout || stdout.charAt(0) !== '{') { disconnectSource(source); return }
+            try {
+                var resp = JSON.parse(stdout)
+                var trajs = resp.trajectorySummaries || {}
+                var isRunning = false
+                var totalSteps = 0
+                for (var cid in trajs) {
+                    var t = trajs[cid]
+                    totalSteps += (t.stepCount || 0)
+                    if (t.status && t.status.indexOf("RUNNING") >= 0) isRunning = true
+                }
+                var stepDelta = Math.max(0, totalSteps - root._agPrevSteps)
+                root._agPrevSteps = totalSteps
+
+                var target = 0
+                if (isRunning) target = Math.min(1.0, stepDelta / 5.0)
+                else if (stepDelta > 0) target = 0.3
+
+                if (target > 0) {
+                    if (root.agInstantRate < 0.1) root.agInstantRate = target * 0.7
+                    else root.agInstantRate += (target - root.agInstantRate) * 0.5
+                } else {
+                    root.agInstantRate *= 0.4
+                    if (root.agInstantRate < 0.01) root.agInstantRate = 0
+                }
+            } catch(e) {}
+            disconnectSource(source)
+        }
+    }
+    property int _agPollSeq: 0
+    Timer {
+        interval: 1000
+        running: root.agOk && root._agPort !== "" && (root.expanded || root.onDesktop)
+        repeat: true
+        onTriggered: {
+            if (root._agPollPending || !root._agPort || !root._agCsrf) return
+            root._agPollPending = true
+            root._agPollSeq = 1 - root._agPollSeq
+            var cmd = "curl -s -m 2 -X POST http://127.0.0.1:" + root._agPort
+                + "/exa.language_server_pb.LanguageServerService/GetAllCascadeTrajectories"
+                + " -H 'X-Codeium-Csrf-Token: " + root._agCsrf + "'"
+                + " -H 'Content-Type: application/json' -d '{}'"
+                + " #" + root._agPollSeq
+            agPollSource.connectSource(cmd)
+        }
+    }
+
     // Tick counter for session countdown (only when popup open)
     property int tick: 0
     Timer {
@@ -140,7 +229,10 @@ PlasmoidItem {
         connectedSources: []
         onNewData: (source, data) => {
             var stdout = data.stdout.trim()
-            if (source.indexOf("gemini_local_stats") >= 0) {
+            if (source.indexOf("antigravity_stats") >= 0) {
+                if (stdout) { try { updateAntigravity(JSON.parse(stdout)) } catch(e) { console.log("Antigravity parse error:", e) } }
+                agLoading = false
+            } else if (source.indexOf("gemini_local_stats") >= 0) {
                 if (stdout) { try { updateGeminiCli(JSON.parse(stdout)) } catch(e) { console.log("GeminiCLI parse error:", e) } }
                 gcliLoading = false
             } else if (source.indexOf("gemini") >= 0) {
@@ -223,6 +315,7 @@ PlasmoidItem {
             if (gcliHasPrev) _updateRate(gcliMaxBps, "_gcliActiveSince", "_gcliIdleTicks", "_gcliPeakBps", "gcliInstantRate")
             else if (root._gcliPids.length === 0) { root.gcliInstantRate = 0 }
 
+
             disconnectSource(source)
         }
     }
@@ -297,6 +390,10 @@ PlasmoidItem {
         gcliLoading = true
         var gcliScript = Qt.resolvedUrl("../code/gemini_local_stats.py").toString().replace("file://", "")
         executable.connectSource("python3 " + gcliScript)
+
+        agLoading = true
+        var agScript = Qt.resolvedUrl("../code/antigravity_stats.py").toString().replace("file://", "")
+        executable.connectSource("python3 " + agScript)
     }
 
     function updateClaude(s) {
@@ -422,6 +519,40 @@ PlasmoidItem {
         }
         _gcliPids = pids
         if (pidsChanged) _gcliPrevRchar = {}
+    }
+
+    function updateAntigravity(a) {
+        agOk = a.ok || false
+        agPlan = a.plan || ""
+        agEmail = a.email || ""
+        var cr = a.credits || {}
+        agPromptCredits = cr.prompt || 0
+        agPromptCreditsMax = cr.prompt_max || 0
+        agFlowCredits = cr.flow || 0
+        agFlowCreditsMax = cr.flow_max || 0
+        var t = a.tokens || {}
+        var td = t.today || {}; var tw = t.week || {}; var tm = t.month || {}
+        agTokInToday = td.input || 0
+        agTokOutToday = td.output || 0
+        agTokInWeek = tw.input || 0
+        agTokOutWeek = tw.output || 0
+        agTokInMonth = tm.input || 0
+        agTokOutMonth = tm.output || 0
+        if (a.throughput) {
+            agRateOutput5m = a.throughput.rate_output_5m || 0
+            agRateOutput30m = a.throughput.rate_output_30m || 0
+            agRateAll5m = a.throughput.rate_all_5m || 0
+            agRateAll30m = a.throughput.rate_all_30m || 0
+        }
+        agDailyTokens = a.daily_tokens || []
+        agFineTokens = a.fine_tokens || []
+        agRecentSessions = a.recent_sessions || []
+        agModelsUsed = a.models_used || {}
+        agModels = a.models || []
+        agPid = a.pid || 0
+        // Save connection info for lightweight curl polling
+        if (a.port) _agPort = String(a.port)
+        if (a.csrf) _agCsrf = a.csrf
     }
 
     // ─── Compact Representation ───
@@ -580,6 +711,10 @@ PlasmoidItem {
                     icon.name: "akonadiconsole"
                 }
                 QQC2.TabButton {
+                    text: "Antigravity"
+                    icon.name: "code-context"
+                }
+                QQC2.TabButton {
                     text: "Gemini API"
                     icon.name: "applications-science"
                     enabled: root.geminiApiKey !== ""
@@ -594,6 +729,7 @@ PlasmoidItem {
 
                 ClaudeTab { appRoot: root }
                 GeminiCliTab { appRoot: root }
+                AntigravityTab { appRoot: root }
                 GeminiTab { appRoot: root }
             }
         }
