@@ -256,7 +256,16 @@ try:
                 continue  # child of another gemini process
             seen_pids.add(pid)
             active_count += 1
-            active_sessions.append({"pid": pid, "cmd": parts[1] if len(parts) > 1 else ""})
+            # Collect this pid + all child pids for I/O polling
+            all_pids = [pid]
+            try:
+                children = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True, timeout=1)
+                for cline in children.stdout.strip().split("\n"):
+                    if cline.strip():
+                        all_pids.append(int(cline.strip()))
+            except:
+                pass
+            active_sessions.append({"pid": pid, "pids": all_pids, "cmd": parts[1] if len(parts) > 1 else ""})
         except:
             pass
 except:

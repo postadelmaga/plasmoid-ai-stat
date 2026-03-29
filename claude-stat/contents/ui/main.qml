@@ -406,11 +406,13 @@ PlasmoidItem {
         gcliActiveSessionsList = g.active_sessions || []
         gcliModelsUsed = g.models_used || {}
 
-        // Extract PIDs for I/O polling
+        // Extract PIDs for I/O polling (parent + children)
         var pids = []
         var sessions = g.active_sessions || []
         for (var i = 0; i < sessions.length; i++) {
-            if (sessions[i].pid) pids.push(String(sessions[i].pid))
+            var spids = sessions[i].pids || []
+            for (var k = 0; k < spids.length; k++) pids.push(String(spids[k]))
+            if (spids.length === 0 && sessions[i].pid) pids.push(String(sessions[i].pid))
         }
         var pidsChanged = pids.length !== _gcliPids.length
         if (!pidsChanged) {
