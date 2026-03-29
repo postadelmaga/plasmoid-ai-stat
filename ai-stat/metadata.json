@@ -1,9 +1,9 @@
 {
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
-        "Id": "claude-stat",
-        "Name": "Claude Stat",
-        "Description": "Real-time Anthropic Claude API usage, token quotas and cost dashboard",
+        "Id": "ai-stat",
+        "Name": "AI Stat",
+        "Description": "Real-time AI coding assistant dashboard — Claude, Gemini CLI, token quotas and throughput",
         "Icon": "preferences-system-performance",
         "Authors": [
             {
@@ -12,7 +12,7 @@
             }
         ],
         "Category": "System Information",
-        "Version": "1.0.0",
+        "Version": "1.1.0",
         "License": "GPL-3.0+"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
