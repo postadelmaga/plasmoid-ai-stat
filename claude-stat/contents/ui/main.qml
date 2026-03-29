@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
+import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
@@ -25,6 +26,8 @@ PlasmoidItem {
 
     property bool onDesktop: Plasmoid.formFactor === 0
     preferredRepresentation: onDesktop ? fullRepresentation : compactRepresentation
+
+    Plasmoid.backgroundHints: PlasmaCore.Types.DefaultBackground | PlasmaCore.Types.ShadowBackground
 
     // ── Claude state ──
     property bool loading: false
@@ -214,7 +217,7 @@ PlasmoidItem {
             root._pollPending = true
             // Alternate between 2 strings to force re-execution without unbounded accumulation
             root._pollSeq = 1 - root._pollSeq
-            var cmd = "grep ^rchar:"
+            var cmd = "grep -H ^rchar:"
             for (var i = 0; i < root._sessionPids.length; i++)
                 cmd += " /proc/" + root._sessionPids[i] + "/io"
             cmd += " 2>/dev/null #" + root._pollSeq
