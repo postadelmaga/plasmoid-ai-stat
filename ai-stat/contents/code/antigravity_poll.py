@@ -37,10 +37,19 @@ def _discover():
                 continue
             ls_pid = int(parts[0])
             cmdline = parts[1] if len(parts) > 1 else ""
-            m = re.search(r'--csrf_token\s+(\S+)', cmdline)
-            if not m:
+            # Extract --csrf_token (not --extension_server_csrf_token)
+            _csrf = ""
+            try:
+                with open(f"/proc/{ls_pid}/cmdline") as cf:
+                    args = cf.read().split('\0')
+                for ai in range(len(args) - 1):
+                    if args[ai] == "--csrf_token":
+                        _csrf = args[ai + 1]
+                        break
+            except:
+                pass
+            if not _csrf:
                 continue
-            _csrf = m.group(1)
             ss_result = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True, timeout=2)
             for sl in ss_result.stdout.strip().split("\n"):
                 if f"pid={ls_pid}" in sl:

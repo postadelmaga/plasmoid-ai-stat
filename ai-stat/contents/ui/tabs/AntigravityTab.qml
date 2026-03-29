@@ -58,17 +58,17 @@ Flickable {
             Layout.margins: Kirigami.Units.largeSpacing; horizontalAlignment: Text.AlignHCenter
         }
 
-        // Credits Stats (like Prompt Stats in Claude)
+        // Token Stats (like Prompt Stats in Claude)
         ColumnLayout {
             visible: appRoot.agOk
             Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
-            SectionHeader { text: i18n("Credits") }
+            SectionHeader { text: i18n("Usage") }
             GridLayout {
                 Layout.fillWidth: true
                 columns: 3; columnSpacing: Kirigami.Units.smallSpacing; rowSpacing: Kirigami.Units.smallSpacing
-                StatCard { label: i18n("Prompt"); value: appRoot.agPromptCredits.toString(); sub: i18n("/ %1", appRoot.agPromptCreditsMax); accent: Kirigami.Theme.highlightColor; Layout.fillWidth: true }
-                StatCard { label: i18n("Flow"); value: appRoot.agFlowCredits.toString(); sub: i18n("/ %1", appRoot.agFlowCreditsMax); accent: Kirigami.Theme.positiveTextColor; Layout.fillWidth: true }
-                StatCard { label: i18n("Sessions"); value: appRoot.agRecentSessions.length.toString(); accent: Kirigami.Theme.neutralTextColor; Layout.fillWidth: true }
+                StatCard { label: i18n("Today"); value: Api.formatTokens(appRoot.agTokInToday + appRoot.agTokOutToday); accent: Kirigami.Theme.highlightColor; Layout.fillWidth: true }
+                StatCard { label: i18n("Week"); value: Api.formatTokens(appRoot.agTokInWeek + appRoot.agTokOutWeek); accent: Kirigami.Theme.positiveTextColor; Layout.fillWidth: true }
+                StatCard { label: i18n("Month"); value: Api.formatTokens(appRoot.agTokInMonth + appRoot.agTokOutMonth); accent: Kirigami.Theme.neutralTextColor; Layout.fillWidth: true }
             }
         }
 
@@ -89,25 +89,25 @@ Flickable {
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: Kirigami.Units.smallSpacing
 
-                    // Credits ring (left)
+                    // Week tokens ring (left)
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
                         DualQuotaRing {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: agDashRow.parent._ringSize; height: agDashRow.parent._ringSize
-                            outerUsed: appRoot.agPromptCreditsMax - appRoot.agPromptCredits
-                            outerLimit: Math.max(appRoot.agPromptCreditsMax, 1)
-                            outerLabel: "prompt"
-                            outerColor: outerPct > 0.9 ? Kirigami.Theme.negativeTextColor : outerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
-                            innerUsed: appRoot.agFlowCreditsMax - appRoot.agFlowCredits
-                            innerLimit: Math.max(appRoot.agFlowCreditsMax, 1)
-                            innerLabel: "flow"
-                            innerColor: innerPct > 0.9 ? Kirigami.Theme.negativeTextColor : innerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor
+                            outerUsed: appRoot.agTokInWeek
+                            outerLimit: Math.max(appRoot.agTokInMonth, appRoot.agTokInWeek * 1.5, 1)
+                            outerLabel: "in"
+                            outerColor: Kirigami.Theme.highlightColor
+                            innerUsed: appRoot.agTokOutWeek
+                            innerLimit: Math.max(appRoot.agTokOutMonth, appRoot.agTokOutWeek * 1.5, 1)
+                            innerLabel: "out"
+                            innerColor: Kirigami.Theme.positiveTextColor
                         }
                         PlasmaComponents.Label {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: i18n("Credits")
+                            text: i18n("Week")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
                             opacity: 0.35
                         }

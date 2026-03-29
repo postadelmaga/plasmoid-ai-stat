@@ -89,19 +89,25 @@ Flickable {
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: Kirigami.Units.smallSpacing
 
-                    // Quota ring (left) — requests today vs daily limit
+                    // Week tokens ring (left)
                     Column {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
-                        QuotaRing {
+                        DualQuotaRing {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: gcliDashRow.parent._ringSize; height: gcliDashRow.parent._ringSize
-                            used: appRoot.gcliReqToday; limit: appRoot.gcliReqLimit; label: "req/day"
-                            ringColor: pct > 0.9 ? Kirigami.Theme.negativeTextColor : pct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
+                            outerUsed: appRoot.gcliTokInWeek
+                            outerLimit: Math.max(appRoot.gcliTokInMonth, appRoot.gcliTokInWeek * 1.5, 1)
+                            outerLabel: "in"
+                            outerColor: Kirigami.Theme.highlightColor
+                            innerUsed: appRoot.gcliTokOutWeek
+                            innerLimit: Math.max(appRoot.gcliTokOutMonth, appRoot.gcliTokOutWeek * 1.5, 1)
+                            innerLabel: "out"
+                            innerColor: Kirigami.Theme.positiveTextColor
                         }
                         PlasmaComponents.Label {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: i18n("Quota")
+                            text: i18n("Week")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
                             opacity: 0.35
                         }

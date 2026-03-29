@@ -55,10 +55,21 @@ try:
             continue
         ls_pid = int(parts[0])
         cmdline = parts[1] if len(parts) > 1 else ""
-        # Extract CSRF token
-        m = re.search(r'--csrf_token\s+(\S+)', cmdline)
+        # Extract CSRF token (not extension_server_csrf_token)
+        m = re.search(r'(?<!\w)--csrf_token\s+(\S+)', cmdline)
         if m:
             csrf = m.group(1)
+        else:
+            # Fallback: read from /proc/pid/cmdline directly
+            try:
+                with open(f"/proc/{ls_pid}/cmdline") as cf:
+                    args = cf.read().split('\0')
+                for ai in range(len(args) - 1):
+                    if args[ai] == "--csrf_token":
+                        csrf = args[ai + 1]
+                        break
+            except:
+                pass
         break
 except:
     pass
