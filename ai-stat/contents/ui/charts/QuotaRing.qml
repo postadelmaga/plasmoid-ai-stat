@@ -12,6 +12,7 @@ Item {
     property double limit: 1
     property string label: ""
     property color ringColor: Kirigami.Theme.highlightColor
+    property bool compact: false
 
     property alias ringWidth: quotaRing.width
     property alias ringHeight: quotaRing.height
@@ -63,6 +64,7 @@ Item {
         spacing: 0
 
         PlasmaComponents.Label {
+            visible: !quotaRing.compact
             text: Api.formatTokens(quotaRing.used)
             font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
             font.weight: Font.Bold
@@ -70,6 +72,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter
         }
         PlasmaComponents.Label {
+            visible: !quotaRing.compact
             text: Api.formatTokens(quotaRing.limit)
             font.pointSize: Kirigami.Theme.smallFont.pointSize * 1.0
             opacity: 0.4
@@ -78,8 +81,10 @@ Item {
         }
         PlasmaComponents.Label {
             text: quotaRing.label
-            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.92
-            opacity: 0.3
+            font.pointSize: quotaRing.compact ? Kirigami.Theme.defaultFont.pointSize * 1.1 : Kirigami.Theme.smallFont.pointSize * 0.92
+            font.weight: quotaRing.compact ? Font.Bold : Font.Normal
+            color: quotaRing.compact ? quotaRing.ringColor : Kirigami.Theme.textColor
+            opacity: quotaRing.compact ? 0.9 : 0.3
             horizontalAlignment: Text.AlignHCenter
             Layout.alignment: Qt.AlignHCenter
         }

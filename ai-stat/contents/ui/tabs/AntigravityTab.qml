@@ -166,6 +166,93 @@ Flickable {
             }
         }
 
+        // Daily History
+        Item {
+            visible: appRoot.agOk && appRoot.agDailyTokens.length > 0; Layout.fillWidth: true
+            Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
+            Layout.margins: Kirigami.Units.smallSpacing
+            ColumnLayout {
+                anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
+                SectionHeader { text: i18n("Daily History") }
+                DailyChart { Layout.fillWidth: true; Layout.fillHeight: true; chartData: appRoot.agDailyTokens }
+            }
+        }
+
+        // Model Quotas — mini rings grid
+        ColumnLayout {
+            visible: appRoot.agOk && appRoot.agModels.length > 0
+            Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
+            SectionHeader { text: i18n("Model Quotas") }
+            GridLayout {
+                Layout.alignment: Qt.AlignHCenter
+                columns: 3
+                columnSpacing: Kirigami.Units.smallSpacing
+                rowSpacing: Kirigami.Units.mediumSpacing
+
+                Repeater {
+                    model: appRoot.agModels
+                    Column {
+                        required property var modelData
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 2
+
+                        property real _remaining: modelData.remaining || 0
+                        property color _ringColor: _remaining > 0.3 ? Kirigami.Theme.positiveTextColor
+                                                 : _remaining > 0.1 ? Kirigami.Theme.neutralTextColor
+                                                 : Kirigami.Theme.negativeTextColor
+
+                        QuotaRing {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: Kirigami.Units.gridUnit * 4
+                            height: Kirigami.Units.gridUnit * 4
+                            used: Math.round((1.0 - parent._remaining) * 100)
+                            limit: 100
+                            label: Math.round(parent._remaining * 100) + "%"
+                            ringColor: parent._ringColor
+                            compact: true
+                        }
+
+                        PlasmaComponents.Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: {
+                                // Short model name
+                                var l = modelData.label || ""
+                                if (l.indexOf("Gemini 3.1 Pro (High)") >= 0) return "Pro High"
+                                if (l.indexOf("Gemini 3.1 Pro (Low)") >= 0) return "Pro Low"
+                                if (l.indexOf("Gemini 3 Flash") >= 0) return "Flash"
+                                if (l.indexOf("Claude Sonnet") >= 0) return "Sonnet"
+                                if (l.indexOf("Claude Opus") >= 0) return "Opus"
+                                if (l.indexOf("GPT-OSS") >= 0) return "GPT-OSS"
+                                return l.split(" ")[0]
+                            }
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.85
+                            font.weight: Font.DemiBold
+                            opacity: 0.6
+                        }
+
+                        PlasmaComponents.Label {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            visible: (modelData.reset || "") !== ""
+                            text: {
+                                var r = modelData.reset || ""
+                                if (!r) return ""
+                                try {
+                                    var d = new Date(r)
+                                    var now = new Date()
+                                    var diffH = Math.round((d - now) / 3600000)
+                                    if (diffH <= 0) return i18n("reset now")
+                                    if (diffH < 24) return i18n("%1h", diffH)
+                                    return i18n("%1d", Math.round(diffH / 24))
+                                } catch(e) { return "" }
+                            }
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.78
+                            opacity: 0.3
+                        }
+                    }
+                }
+            }
+        }
+
         // Recent Sessions
         ColumnLayout {
             visible: appRoot.agOk && appRoot.agRecentSessions.length > 0
@@ -184,13 +271,10 @@ Flickable {
                         id: sessCol
                         anchors { left: parent.left; right: parent.right; top: parent.top; margins: Kirigami.Units.smallSpacing }
                         spacing: 2
-                        RowLayout {
+                        PlasmaComponents.Label {
+                            text: modelData.title || modelData.id || ""
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize; font.weight: Font.DemiBold
                             Layout.fillWidth: true
-                            PlasmaComponents.Label {
-                                text: modelData.title || modelData.id || ""
-                                font.pointSize: Kirigami.Theme.smallFont.pointSize; font.weight: Font.DemiBold
-                                Layout.fillWidth: true
-                            }
                         }
                         RowLayout {
                             Layout.fillWidth: true
@@ -203,53 +287,6 @@ Flickable {
                                 font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.95; opacity: 0.4
                             }
                             Item { Layout.fillWidth: true }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Daily History
-        Item {
-            visible: appRoot.agOk && appRoot.agDailyTokens.length > 0; Layout.fillWidth: true
-            Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
-            Layout.margins: Kirigami.Units.smallSpacing
-            ColumnLayout {
-                anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
-                SectionHeader { text: i18n("Daily History") }
-                DailyChart { Layout.fillWidth: true; Layout.fillHeight: true; chartData: appRoot.agDailyTokens }
-            }
-        }
-
-        // Model Quotas
-        ColumnLayout {
-            visible: appRoot.agOk && appRoot.agModels.length > 0
-            Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
-            SectionHeader { text: i18n("Model Quotas") }
-            Repeater {
-                model: appRoot.agModels
-                Rectangle {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    implicitHeight: mqRow.implicitHeight + Kirigami.Units.smallSpacing * 2
-                    radius: Kirigami.Units.cornerRadius
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-
-                    RowLayout {
-                        id: mqRow
-                        anchors { left: parent.left; right: parent.right; top: parent.top; margins: Kirigami.Units.smallSpacing }
-                        spacing: Kirigami.Units.smallSpacing
-                        PlasmaComponents.Label {
-                            text: modelData.label || ""
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize; font.weight: Font.DemiBold
-                            Layout.fillWidth: true
-                        }
-                        PlasmaComponents.Label {
-                            text: Math.round((modelData.remaining || 0) * 100) + "%"
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            color: modelData.remaining > 0.3 ? Kirigami.Theme.positiveTextColor
-                                 : modelData.remaining > 0.1 ? Kirigami.Theme.neutralTextColor
-                                 : Kirigami.Theme.negativeTextColor
                         }
                     }
                 }

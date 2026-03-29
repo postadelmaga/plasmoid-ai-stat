@@ -111,15 +111,20 @@ flow_credits = plan_status.get("availableFlowCredits", 0)
 flow_credits_max = plan_info.get("monthlyFlowCredits", 0)
 email = user_status.get("email", "")
 
-# Model quotas
+# Model quotas — sorted: Gemini first, then others
 models = []
 for mc in user_status.get("cascadeModelConfigData", {}).get("clientModelConfigs", []):
     qi = mc.get("quotaInfo", {})
+    label = mc.get("label", "")
     models.append({
-        "label": mc.get("label", ""),
+        "label": label,
         "remaining": qi.get("remainingFraction", 0),
         "reset": qi.get("resetTime", ""),
+        "_sort": 0 if "gemini" in label.lower() else 1,
     })
+models.sort(key=lambda m: (m["_sort"], m["label"]))
+for m in models:
+    del m["_sort"]
 
 # --- Get conversations and token usage ---
 trajs_resp = _api_call(port, csrf, "GetAllCascadeTrajectories")
