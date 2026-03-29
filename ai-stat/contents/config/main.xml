@@ -25,5 +25,17 @@
         <entry name="compactStyle" type="String">
             <default>ring</default>
         </entry>
+        <entry name="enableClaude" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="enableGeminiCli" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="enableAntigravity" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="enableGeminiApi" type="Bool">
+            <default>false</default>
+        </entry>
     </group>
 </kcfg>

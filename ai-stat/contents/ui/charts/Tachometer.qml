@@ -37,7 +37,7 @@ Item {
     Timer { id: _idleTimer; interval: 4000; onTriggered: tacho._active = false }
     Timer {
         id: jitterTimer
-        interval: 100
+        interval: 200
         running: tacho._active && tacho.pct > 0
         repeat: true
         onTriggered: {

@@ -23,6 +23,10 @@ PlasmoidItem {
     property int dailyOutputLimitM: plasmoid.configuration.dailyOutputLimitM || 0
     property string geminiApiKey: plasmoid.configuration.geminiApiKey || ""
     property string compactStyle: plasmoid.configuration.compactStyle || "ring"
+    property bool enableClaude: plasmoid.configuration.enableClaude !== false
+    property bool enableGeminiCli: plasmoid.configuration.enableGeminiCli !== false
+    property bool enableAntigravity: plasmoid.configuration.enableAntigravity !== false
+    property bool enableGeminiApi: plasmoid.configuration.enableGeminiApi === true
 
     property bool onDesktop: Plasmoid.formFactor === 0
     preferredRepresentation: onDesktop ? fullRepresentation : compactRepresentation
@@ -195,7 +199,7 @@ PlasmoidItem {
     property int _agPollSeq: 0
     Timer {
         interval: 2000
-        running: root.agOk && root._agPort !== "" && (root.expanded || root.onDesktop)
+        running: root.enableAntigravity && root.agOk && root._agPort !== "" && (root.expanded || root.onDesktop)
         repeat: true
         onTriggered: {
             if (root._agPollPending || !root._agPort || !root._agCsrf) return
@@ -346,7 +350,7 @@ PlasmoidItem {
 
     property int _pollSeq: 0
     property bool _pollPending: false
-    property bool _hasAnyPids: root._sessionPids.length > 0 || root._gcliPids.length > 0
+    property bool _hasAnyPids: (root.enableClaude && root._sessionPids.length > 0) || (root.enableGeminiCli && root._gcliPids.length > 0)
     Timer {
         interval: 1000
         running: root._hasAnyPids && (root.expanded || root.onDesktop || root.compactStyle === "tacho")
@@ -374,26 +378,32 @@ PlasmoidItem {
 
     // ── Data functions ──
     function refreshAll() {
-        loading = true
-        var claudeScript = Qt.resolvedUrl("../code/local_stats.py").toString().replace("file://", "")
-        var limitArgs = ""
-        if (dailyInputLimitM > 0) limitArgs += " --input-limit " + dailyInputLimitM
-        if (dailyOutputLimitM > 0) limitArgs += " --output-limit " + dailyOutputLimitM
-        executable.connectSource("python3 " + claudeScript + limitArgs)
+        if (enableClaude) {
+            loading = true
+            var claudeScript = Qt.resolvedUrl("../code/local_stats.py").toString().replace("file://", "")
+            var limitArgs = ""
+            if (dailyInputLimitM > 0) limitArgs += " --input-limit " + dailyInputLimitM
+            if (dailyOutputLimitM > 0) limitArgs += " --output-limit " + dailyOutputLimitM
+            executable.connectSource("python3 " + claudeScript + limitArgs)
+        }
 
-        if (geminiApiKey) {
+        if (enableGeminiApi && geminiApiKey) {
             geminiLoading = true
             var geminiScript = Qt.resolvedUrl("../code/gemini_stats.py").toString().replace("file://", "")
             executable.connectSource("python3 " + geminiScript + " " + geminiApiKey)
         }
 
-        gcliLoading = true
-        var gcliScript = Qt.resolvedUrl("../code/gemini_local_stats.py").toString().replace("file://", "")
-        executable.connectSource("python3 " + gcliScript)
+        if (enableGeminiCli) {
+            gcliLoading = true
+            var gcliScript = Qt.resolvedUrl("../code/gemini_local_stats.py").toString().replace("file://", "")
+            executable.connectSource("python3 " + gcliScript)
+        }
 
-        agLoading = true
-        var agScript = Qt.resolvedUrl("../code/antigravity_stats.py").toString().replace("file://", "")
-        executable.connectSource("python3 " + agScript)
+        if (enableAntigravity) {
+            agLoading = true
+            var agScript = Qt.resolvedUrl("../code/antigravity_stats.py").toString().replace("file://", "")
+            executable.connectSource("python3 " + agScript)
+        }
     }
 
     function updateClaude(s) {
@@ -690,47 +700,76 @@ PlasmoidItem {
 
 
         ColumnLayout {
+            id: fullRepCol
             anchors.fill: parent
             spacing: 0
 
             QQC2.TabBar {
                 id: tabBar
                 Layout.fillWidth: true
-                // QQC2 breeze style hardcodes Header colorSet — override it
                 Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
                 Kirigami.Theme.inherit: false
 
                 QQC2.TabButton {
+                    visible: root.enableClaude
                     text: "Claude"
                     icon.name: "preferences-system-performance"
                     Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
                     Kirigami.Theme.inherit: false
                 }
                 QQC2.TabButton {
+                    visible: root.enableGeminiCli
                     text: "Gemini CLI"
                     icon.name: "akonadiconsole"
                 }
                 QQC2.TabButton {
+                    visible: root.enableAntigravity
                     text: "Antigravity"
                     icon.name: "code-context"
                 }
                 QQC2.TabButton {
+                    visible: root.enableGeminiApi
                     text: "Gemini API"
                     icon.name: "applications-science"
-                    enabled: root.geminiApiKey !== ""
-                    opacity: root.geminiApiKey !== "" ? 1.0 : 0.4
                 }
             }
+
+            // Map visible tab index to service
+            property var _tabMap: {
+                var m = []
+                if (root.enableClaude) m.push("claude")
+                if (root.enableGeminiCli) m.push("gcli")
+                if (root.enableAntigravity) m.push("ag")
+                if (root.enableGeminiApi) m.push("gemini")
+                return m
+            }
+            property string _activeTab: _tabMap[tabBar.currentIndex] || ""
 
             StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 currentIndex: tabBar.currentIndex
 
-                ClaudeTab { appRoot: root }
-                GeminiCliTab { appRoot: root }
-                AntigravityTab { appRoot: root }
-                GeminiTab { appRoot: root }
+                Loader {
+                    visible: root.enableClaude
+                    active: fullRepCol._activeTab === "claude"
+                    sourceComponent: Component { ClaudeTab { appRoot: root } }
+                }
+                Loader {
+                    visible: root.enableGeminiCli
+                    active: fullRepCol._activeTab === "gcli"
+                    sourceComponent: Component { GeminiCliTab { appRoot: root } }
+                }
+                Loader {
+                    visible: root.enableAntigravity
+                    active: fullRepCol._activeTab === "ag"
+                    sourceComponent: Component { AntigravityTab { appRoot: root } }
+                }
+                Loader {
+                    visible: root.enableGeminiApi
+                    active: fullRepCol._activeTab === "gemini"
+                    sourceComponent: Component { GeminiTab { appRoot: root } }
+                }
             }
         }
     }

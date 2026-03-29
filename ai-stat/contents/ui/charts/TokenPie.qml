@@ -14,11 +14,12 @@ Canvas {
 
     property double total: inputTokens + outputTokens + cacheTokens
 
-    onInputTokensChanged: requestPaint()
-    onOutputTokensChanged: requestPaint()
-    onCacheTokensChanged: requestPaint()
-    onWidthChanged: requestPaint()
-    onHeightChanged: requestPaint()
+    Timer { id: _pieDebounce; interval: 50; onTriggered: pie.requestPaint() }
+    onInputTokensChanged: _pieDebounce.restart()
+    onOutputTokensChanged: _pieDebounce.restart()
+    onCacheTokensChanged: _pieDebounce.restart()
+    onWidthChanged: _pieDebounce.restart()
+    onHeightChanged: _pieDebounce.restart()
 
     onPaint: {
         var ctx = getContext("2d")

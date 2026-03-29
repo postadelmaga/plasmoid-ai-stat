@@ -78,12 +78,13 @@ Item {
             }
         }
 
+        Timer { id: _repaintDebounce; interval: 30; onTriggered: canvas.requestPaint() }
         Connections {
             target: dualRing
-            function onOuterPctChanged() { canvas.requestPaint() }
-            function onInnerPctChanged() { canvas.requestPaint() }
-            function onOuterColorChanged() { canvas.requestPaint() }
-            function onInnerColorChanged() { canvas.requestPaint() }
+            function onOuterPctChanged() { _repaintDebounce.restart() }
+            function onInnerPctChanged() { _repaintDebounce.restart() }
+            function onOuterColorChanged() { _repaintDebounce.restart() }
+            function onInnerColorChanged() { _repaintDebounce.restart() }
         }
 
         Component.onCompleted: requestPaint()

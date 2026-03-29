@@ -230,11 +230,20 @@ Flickable {
 
         // Models
         ColumnLayout {
-            visible: Object.keys(appRoot.modelsUsed).length > 0
+            property var _modelKeys: Object.keys(appRoot.modelsUsed)
+            property double _maxTok: {
+                var max = 0
+                for (var i = 0; i < _modelKeys.length; i++) {
+                    var t = (appRoot.modelsUsed[_modelKeys[i]].input || 0) + (appRoot.modelsUsed[_modelKeys[i]].output || 0)
+                    if (t > max) max = t
+                }
+                return max || 1
+            }
+            visible: _modelKeys.length > 0
             Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
             SectionHeader { text: i18n("Models") }
             Repeater {
-                model: Object.keys(appRoot.modelsUsed)
+                model: parent._modelKeys
                 ModelRow {
                     required property string modelData
                     Layout.fillWidth: true
@@ -242,14 +251,7 @@ Flickable {
                     inputTokens: appRoot.modelsUsed[modelData].input || 0
                     outputTokens: appRoot.modelsUsed[modelData].output || 0
                     cost: appRoot.modelsUsed[modelData].cost || 0
-                    maxTokens: {
-                        var max = 0; var keys = Object.keys(appRoot.modelsUsed)
-                        for (var i = 0; i < keys.length; i++) {
-                            var t = (appRoot.modelsUsed[keys[i]].input || 0) + (appRoot.modelsUsed[keys[i]].output || 0)
-                            if (t > max) max = t
-                        }
-                        return max || 1
-                    }
+                    maxTokens: parent.parent._maxTok
                 }
             }
         }

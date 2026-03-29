@@ -13,12 +13,45 @@ Item {
     property alias cfg_dailyOutputLimitM: outputLimitSpinBox.value
     property alias cfg_geminiApiKey: geminiKeyField.text
     property string cfg_compactStyle: "ring"
+    property alias cfg_enableClaude: enableClaudeCheck.checked
+    property alias cfg_enableGeminiCli: enableGeminiCliCheck.checked
+    property alias cfg_enableAntigravity: enableAntigravityCheck.checked
+    property alias cfg_enableGeminiApi: enableGeminiApiCheck.checked
 
     Kirigami.FormLayout {
         anchors {
             left: parent.left
             right: parent.right
             top: parent.top
+        }
+
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Services")
+        }
+
+        QQC2.CheckBox {
+            id: enableClaudeCheck
+            Kirigami.FormData.label: i18n("Claude Code:")
+            text: i18n("Monitor ~/.claude/ usage")
+        }
+
+        QQC2.CheckBox {
+            id: enableGeminiCliCheck
+            Kirigami.FormData.label: i18n("Gemini CLI:")
+            text: i18n("Monitor ~/.gemini/ usage")
+        }
+
+        QQC2.CheckBox {
+            id: enableAntigravityCheck
+            Kirigami.FormData.label: i18n("Antigravity:")
+            text: i18n("Monitor via language server API")
+        }
+
+        QQC2.CheckBox {
+            id: enableGeminiApiCheck
+            Kirigami.FormData.label: i18n("Gemini API:")
+            text: i18n("Check rate limits (requires API key)")
         }
 
         Kirigami.Separator {
