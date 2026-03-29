@@ -194,7 +194,7 @@ PlasmoidItem {
     }
     property int _agPollSeq: 0
     Timer {
-        interval: 1000
+        interval: 2000
         running: root.agOk && root._agPort !== "" && (root.expanded || root.onDesktop)
         repeat: true
         onTriggered: {

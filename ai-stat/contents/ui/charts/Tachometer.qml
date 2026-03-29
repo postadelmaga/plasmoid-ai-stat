@@ -30,19 +30,21 @@ Item {
     onPctChanged: { _rising = (pct > _prevPctSnap); _prevPctSnap = pct }
     property real _prevPctSnap: 0  // updated only on pct change, not per-frame
 
-    // Engine vibration — tiny random jitter on the needle when active (GPU only, no canvas)
+    // Engine vibration — jitter only while value is actively changing
     property real _jitter: 0
+    property bool _active: false
+    onValueChanged: { _active = true; _idleTimer.restart() }
+    Timer { id: _idleTimer; interval: 4000; onTriggered: tacho._active = false }
     Timer {
         id: jitterTimer
-        interval: 80
-        running: tacho.pct > 0
+        interval: 100
+        running: tacho._active && tacho.pct > 0
         repeat: true
         onTriggered: {
-            // Amplitude proportional to value: idle ~0.3°, full throttle ~1.8°
             var amplitude = 0.3 + tacho.pct * 1.5
             tacho._jitter = (Math.random() - 0.5) * 2 * amplitude
         }
-        onRunningChanged: if (!running) tacho._jitter = 0  // reset at rest
+        onRunningChanged: if (!running) tacho._jitter = 0
     }
 
     // Needle color = zone color
