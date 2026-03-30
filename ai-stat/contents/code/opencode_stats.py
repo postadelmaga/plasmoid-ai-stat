@@ -112,40 +112,44 @@ try:
             pass
 
     # --- Parse sessions ---
-    cursor.execute("SELECT count(*) as cnt FROM session WHERE parent_id IS NULL")
-    session_count = cursor.fetchone()["cnt"]
-    
-    cursor.execute("""
+    # Use a separate cursor for session queries to avoid cursor reuse bug
+    cursor2 = conn.cursor()
+    cursor2.execute("SELECT count(*) as cnt FROM session WHERE parent_id IS NULL")
+    session_count = cursor2.fetchone()["cnt"]
+
+    cursor2.execute("""
         SELECT id, title, time_created, time_updated 
         FROM session 
         WHERE parent_id IS NULL 
         ORDER BY time_updated DESC 
         LIMIT 8
     """)
-    
-    for row in cursor:
+    session_rows = cursor2.fetchall()
+
+    cursor3 = conn.cursor()
+    for row in session_rows:
         try:
             session_id = row["id"]
             title = row["title"] or "Untitled"
             time_created = row["time_created"]
             time_updated = row["time_updated"]
-            
-            # Get tokens for this session
-            cursor.execute("""
+
+            # Get tokens for this session (separate cursor to avoid reuse)
+            cursor3.execute("""
                 SELECT data
                 FROM message 
                 WHERE session_id=? AND json_extract(data,'$.role')='assistant'
                   AND json_extract(data,'$.tokens.total') > 0
             """, (session_id,))
-            
+
             s_inp = 0
             s_out = 0
             s_cr = 0
             s_cw = 0
             model_counts = {}
             provider_map = {}
-            
-            for msg_row in cursor:
+
+            for msg_row in cursor3.fetchall():
                 try:
                     data = json.loads(msg_row["data"])
                     tokens = data.get("tokens", {})
@@ -154,22 +158,22 @@ try:
                     cache = tokens.get("cache", {})
                     s_cr += cache.get("read", 0)
                     s_cw += cache.get("write", 0)
-                    
+
                     model = data.get("modelID", "unknown")
                     provider = data.get("providerID", "unknown")
                     model_counts[model] = model_counts.get(model, 0) + 1
                     provider_map[model] = provider
                 except:
                     pass
-                    
+
             dominant_model = "unknown"
             dominant_provider = "unknown"
             if model_counts:
                 dominant_model = max(model_counts.items(), key=lambda x: x[1])[0]
                 dominant_provider = provider_map.get(dominant_model, "unknown")
-                
+
             duration_min = (time_updated - time_created) / 60000.0
-            
+
             recent_sessions.append({
                 "id": session_id[:12],
                 "title": title,
