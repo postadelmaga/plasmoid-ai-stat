@@ -126,7 +126,11 @@ Flickable {
 
         // Section 6: Models
         ColumnLayout {
-            property var _modelKeys: Object.keys(appRoot.ocModelsUsed)
+            property var _modelKeys: Object.keys(appRoot.ocModelsUsed).sort(function(a, b) {
+                var ta = (appRoot.ocModelsUsed[a].input || 0) + (appRoot.ocModelsUsed[a].output || 0)
+                var tb = (appRoot.ocModelsUsed[b].input || 0) + (appRoot.ocModelsUsed[b].output || 0)
+                return tb - ta
+            })
             property double _maxTok: {
                 var max = 0
                 for (var i = 0; i < _modelKeys.length; i++) {
