@@ -160,6 +160,34 @@ PlasmoidItem {
     property string _agCsrf: ""
     property int _agPrevSteps: 0
 
+    // ── OpenCode state ──
+    property bool ocLoading: false
+    property int ocActiveSessions: 0
+    property int ocTotalSessions: 0
+    property double ocTokInToday: 0
+    property double ocTokOutToday: 0
+    property double ocTokInWeek: 0
+    property double ocTokOutWeek: 0
+    property double ocTokInMonth: 0
+    property double ocTokOutMonth: 0
+    property var ocDailyTokens: []
+    property var ocFineTokens: []
+    property var ocRecentSessions: []
+    property var ocModelsUsed: ({})
+    property real ocRateOutput5m: 0
+    property real ocRateOutput30m: 0
+    property real ocRateAll5m: 0
+    property real ocRateAll30m: 0
+    property var _ocPids: []
+    property var _ocPrevRchar: ({})
+    property real ocInstantRate: 0
+    property int _ocIdleTicks: 0
+    property int _ocActiveSince: 0
+    property real _ocPeakBps: 10000
+    readonly property real ocInstantAllRate: ocInstantRate * (ocRateAll5m > 0 ? ocRateAll5m : ocRateAll30m)
+    readonly property real ocInstantOutputRate: ocInstantRate * (ocRateOutput5m > 0 ? ocRateOutput5m : ocRateOutput30m)
+    property bool enableOpenCode: plasmoid.configuration.enableOpenCode !== false
+
     Plasma5Support.DataSource {
         id: agPollSource
         engine: "executable"
@@ -233,7 +261,10 @@ PlasmoidItem {
         connectedSources: []
         onNewData: (source, data) => {
             var stdout = data.stdout.trim()
-            if (source.indexOf("antigravity_stats") >= 0) {
+            if (source.indexOf("opencode_stats") >= 0) {
+                if (stdout) { try { updateOpenCode(JSON.parse(stdout)) } catch(e) { console.log("OpenCode parse error:", e) } }
+                ocLoading = false
+            } else if (source.indexOf("antigravity_stats") >= 0) {
                 if (stdout) { try { updateAntigravity(JSON.parse(stdout)) } catch(e) { console.log("Antigravity parse error:", e) } }
                 agLoading = false
             } else if (source.indexOf("gemini_local_stats") >= 0) {
@@ -280,14 +311,16 @@ PlasmoidItem {
             // Parse grep output: "/proc/PID/io:rchar: VALUE"
             // Split by Claude vs Gemini PIDs
             var lines = stdout.split("\n")
-            var claudeMaxBps = 0, gcliMaxBps = 0
-            var claudeHasPrev = false, gcliHasPrev = false
+            var claudeMaxBps = 0, gcliMaxBps = 0, ocMaxBps = 0
+            var claudeHasPrev = false, gcliHasPrev = false, ocHasPrev = false
 
             // Build PID lookup sets
             var claudePidSet = {}
             for (var ci = 0; ci < root._sessionPids.length; ci++) claudePidSet[root._sessionPids[ci]] = true
             var gcliPidSet = {}
             for (var gi = 0; gi < root._gcliPids.length; gi++) gcliPidSet[root._gcliPids[gi]] = true
+            var ocPidSet = {}
+            for (var oi = 0; oi < root._ocPids.length; oi++) ocPidSet[root._ocPids[oi]] = true
 
             for (var i = 0; i < lines.length; i++) {
                 var line = lines[i]
@@ -300,13 +333,15 @@ PlasmoidItem {
 
                 var isClaude = claudePidSet[pid] || false
                 var isGcli = gcliPidSet[pid] || false
-                var prevMap = isClaude ? root._prevRchar : root._gcliPrevRchar
+                var isOc = ocPidSet[pid] || false
+                var prevMap = isClaude ? root._prevRchar : (isGcli ? root._gcliPrevRchar : root._ocPrevRchar)
                 var prev = prevMap[pid] || 0
 
                 if (prev > 0) {
                     var bps = (rchar - prev)
                     if (isClaude) { if (bps > claudeMaxBps) claudeMaxBps = bps; claudeHasPrev = true }
                     if (isGcli) { if (bps > gcliMaxBps) gcliMaxBps = bps; gcliHasPrev = true }
+                    if (isOc) { if (bps > ocMaxBps) ocMaxBps = bps; ocHasPrev = true }
                 }
                 prevMap[pid] = rchar
             }
@@ -319,6 +354,9 @@ PlasmoidItem {
             if (gcliHasPrev) _updateRate(gcliMaxBps, "_gcliActiveSince", "_gcliIdleTicks", "_gcliPeakBps", "gcliInstantRate")
             else if (root._gcliPids.length === 0) { root.gcliInstantRate = 0 }
 
+            // Update OpenCode rate
+            if (ocHasPrev) _updateRate(ocMaxBps, "_ocActiveSince", "_ocIdleTicks", "_ocPeakBps", "ocInstantRate")
+            else if (root._ocPids.length === 0) { root.ocInstantRate = 0 }
 
             disconnectSource(source)
         }
@@ -350,14 +388,14 @@ PlasmoidItem {
 
     property int _pollSeq: 0
     property bool _pollPending: false
-    property bool _hasAnyPids: (root.enableClaude && root._sessionPids.length > 0) || (root.enableGeminiCli && root._gcliPids.length > 0)
+    property bool _hasAnyPids: (root.enableClaude && root._sessionPids.length > 0) || (root.enableGeminiCli && root._gcliPids.length > 0) || (root.enableOpenCode && root._ocPids.length > 0)
     Timer {
         interval: 1000
         running: root._hasAnyPids && (root.expanded || root.onDesktop || root.compactStyle === "tacho")
         repeat: true
         onTriggered: {
             if (root._pollPending) return
-            var allPids = root._sessionPids.concat(root._gcliPids)
+            var allPids = root._sessionPids.concat(root._gcliPids).concat(root._ocPids)
             if (allPids.length === 0) return
             root._pollPending = true
             root._pollSeq = 1 - root._pollSeq
@@ -403,6 +441,12 @@ PlasmoidItem {
             agLoading = true
             var agScript = Qt.resolvedUrl("../code/antigravity_stats.py").toString().replace("file://", "")
             executable.connectSource("python3 " + agScript)
+        }
+
+        if (enableOpenCode) {
+            ocLoading = true
+            var ocScript = Qt.resolvedUrl("../code/opencode_stats.py").toString().replace("file://", "")
+            executable.connectSource("python3 " + ocScript)
         }
     }
 
@@ -563,6 +607,44 @@ PlasmoidItem {
         // Save connection info for lightweight curl polling
         if (a.port) _agPort = String(a.port)
         if (a.csrf) _agCsrf = a.csrf
+    }
+
+    function updateOpenCode(o) {
+        ocActiveSessions = (o.sessions || {}).active || 0
+        ocTotalSessions = (o.sessions || {}).total || 0
+        var t = o.tokens || {}
+        var td = t.today || {}; var tw = t.week || {}; var tm = t.month || {}
+        ocTokInToday = (td.input || 0) + (td.cache_read || 0) + (td.cache_write || 0)
+        ocTokOutToday = td.output || 0
+        ocTokInWeek = (tw.input || 0) + (tw.cache_read || 0) + (tw.cache_write || 0)
+        ocTokOutWeek = tw.output || 0
+        ocTokInMonth = (tm.input || 0) + (tm.cache_read || 0) + (tm.cache_write || 0)
+        ocTokOutMonth = tm.output || 0
+        if (o.throughput) {
+            ocRateOutput5m = o.throughput.rate_output_5m || 0
+            ocRateOutput30m = o.throughput.rate_output_30m || 0
+            ocRateAll5m = o.throughput.rate_all_5m || 0
+            ocRateAll30m = o.throughput.rate_all_30m || 0
+        }
+        ocDailyTokens = o.daily_tokens || []
+        ocFineTokens = o.fine_tokens || []
+        ocRecentSessions = o.recent_sessions || []
+        ocModelsUsed = o.models_used || {}
+        var pids = []
+        var sessions = o.active_sessions || []
+        for (var i = 0; i < sessions.length; i++) {
+            var spids = sessions[i].pids || []
+            for (var k = 0; k < spids.length; k++) pids.push(String(spids[k]))
+            if (spids.length === 0 && sessions[i].pid) pids.push(String(sessions[i].pid))
+        }
+        var pidsChanged = pids.length !== _ocPids.length
+        if (!pidsChanged) {
+            for (var j = 0; j < pids.length; j++) {
+                if (pids[j] !== _ocPids[j]) { pidsChanged = true; break }
+            }
+        }
+        _ocPids = pids
+        if (pidsChanged) _ocPrevRchar = {}
     }
 
     // ─── Compact Representation ───
@@ -728,6 +810,13 @@ PlasmoidItem {
                     icon.name: "code-context"
                 }
                 QQC2.TabButton {
+                    visible: root.enableOpenCode
+                    text: "OpenCode"
+                    icon.name: "utilities-terminal"
+                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                    Kirigami.Theme.inherit: false
+                }
+                QQC2.TabButton {
                     visible: root.enableGeminiApi
                     text: "Gemini API"
                     icon.name: "applications-science"
@@ -740,6 +829,7 @@ PlasmoidItem {
                 if (root.enableClaude) m.push("claude")
                 if (root.enableGeminiCli) m.push("gcli")
                 if (root.enableAntigravity) m.push("ag")
+                if (root.enableOpenCode) m.push("oc")
                 if (root.enableGeminiApi) m.push("gemini")
                 return m
             }
@@ -764,6 +854,11 @@ PlasmoidItem {
                     visible: root.enableAntigravity
                     active: fullRepCol._activeTab === "ag"
                     sourceComponent: Component { AntigravityTab { appRoot: root } }
+                }
+                Loader {
+                    visible: root.enableOpenCode
+                    active: fullRepCol._activeTab === "oc"
+                    sourceComponent: Component { OpenCodeTab { appRoot: root } }
                 }
                 Loader {
                     visible: root.enableGeminiApi
