@@ -17,6 +17,7 @@ Item {
     property alias cfg_enableGeminiCli: enableGeminiCliCheck.checked
     property alias cfg_enableAntigravity: enableAntigravityCheck.checked
     property alias cfg_enableGeminiApi: enableGeminiApiCheck.checked
+    property alias cfg_enableOpenCode: enableOpenCodeCheck.checked
 
     Kirigami.FormLayout {
         anchors {
@@ -52,6 +53,12 @@ Item {
             id: enableGeminiApiCheck
             Kirigami.FormData.label: i18n("Gemini API:")
             text: i18n("Check rate limits (requires API key)")
+        }
+
+        QQC2.CheckBox {
+            id: enableOpenCodeCheck
+            Kirigami.FormData.label: i18n("OpenCode:")
+            text: i18n("Monitor ~/.local/share/opencode/ usage")
         }
 
         Kirigami.Separator {
