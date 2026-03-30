@@ -27,6 +27,7 @@ projects_dir = os.path.join(claude_dir, "projects")
 
 cache_dir = os.path.expanduser("~/.cache/ai-stat")
 daily_cache_file = os.path.join(cache_dir, "daily_tokens.json")
+jsonl_cache_file = os.path.join(cache_dir, "jsonl_cache.json")
 
 TIER_LIMITS = {
     "default_claude_max_5x": {"label": "Max 5x", "input_tokens_per_day": 500_000_000, "output_tokens_per_day": 50_000_000},
@@ -119,6 +120,13 @@ try:
 except:
     pass
 
+jsonl_cache = {}
+try:
+    with open(jsonl_cache_file) as f:
+        jsonl_cache = json.load(f)
+except:
+    pass
+
 daily_token_map = {}
 fine_token_map = {}
 models_used = {}
@@ -198,6 +206,72 @@ def _fast_iso_epoch_ms(ts_str):
     except:
         return 0
 
+def _parse_jsonl_to_days(fpath):
+    """Parse a JSONL file → {day: [inp, out, cr, cc]}."""
+    days = {}
+    try:
+        with open(fpath) as jf:
+            for jline in jf:
+                if '"usage"' not in jline:
+                    continue
+                m_inp = _re_int(_re_it.search(jline))
+                m_out = _re_int(_re_ot.search(jline))
+                m_cr = _re_int(_re_cr.search(jline))
+                m_cc = _re_int(_re_cc.search(jline))
+                if m_inp + m_out + m_cr + m_cc == 0:
+                    continue
+                ts_m = _re_ts.search(jline)
+                ts_ms = _fast_iso_epoch_ms(ts_m.group(1)) if ts_m else now_ms
+                add_tokens_by_ts(ts_ms, m_inp, m_out, m_cr, m_cc)
+                # Accumulate per-day for cache
+                try:
+                    day = datetime.fromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d")
+                except:
+                    continue
+                if day not in days:
+                    days[day] = [0, 0, 0, 0]
+                d = days[day]
+                d[0] += m_inp; d[1] += m_out; d[2] += m_cr; d[3] += m_cc
+    except:
+        pass
+    return days
+
+def _replay_cached_days(days_dict):
+    """Replay cached per-day totals into global accumulators."""
+    for day, vals in days_dict.items():
+        # Use midday timestamp for period bucketing
+        try:
+            ts_ms = datetime.strptime(day, "%Y-%m-%d").replace(hour=12).timestamp() * 1000
+        except:
+            continue
+        add_tokens_by_ts(ts_ms, vals[0], vals[1], vals[2], vals[3])
+
+def _process_jsonl_cached(fpath):
+    """Parse JSONL with file-level cache. Returns True if processed."""
+    global jsonl_cache
+    try:
+        st = os.stat(fpath)
+        mt = st.st_mtime
+        sz = st.st_size
+    except:
+        return False
+    cache_key = fpath
+    cached = jsonl_cache.get(cache_key)
+    if cached and cached.get("mt") == mt and cached.get("sz") == sz:
+        _replay_cached_days(cached["d"])
+        return True
+    days = _parse_jsonl_to_days(fpath)
+    jsonl_cache[cache_key] = {"mt": mt, "sz": sz, "d": days}
+    return True
+
+def _process_subagents_cached(proj_path, sid):
+    """Parse all subagent JSONLs for a session, with cache."""
+    sa_dir = os.path.join(proj_path, sid, "subagents")
+    if os.path.isdir(sa_dir):
+        for sa_fname in os.listdir(sa_dir):
+            if sa_fname.endswith(".jsonl"):
+                _process_jsonl_cached(os.path.join(sa_dir, sa_fname))
+
 # --- Active sessions ---
 active_session_ids = set()
 active_sessions = []
@@ -242,6 +316,18 @@ try:
                         ts_ms = _fast_iso_epoch_ms(ts_m.group(1)) if ts_m else now_ms
                         add_tokens_by_ts(ts_ms, m_inp, m_out, m_cr, m_cc)
 
+            # Subagent tokens for this active session
+            sa_dir = os.path.join(projects_dir, escaped_cwd, sid, "subagents")
+            if os.path.isdir(sa_dir):
+                for sa_fname in os.listdir(sa_dir):
+                    if not sa_fname.endswith(".jsonl"):
+                        continue
+                    sa_path = os.path.join(sa_dir, sa_fname)
+                    sa_days = _parse_jsonl_to_days(sa_path)
+                    for vals in sa_days.values():
+                        sess_input += vals[0]; sess_output += vals[1]
+                        sess_cr += vals[2]; sess_cc += vals[3]
+
             duration_min = round((now_ms - started_at) / 60000, 1) if started_at else 0
             jsonl_size = os.path.getsize(jsonl_path) if os.path.exists(jsonl_path) else 0
             active_sessions.append({
@@ -258,6 +344,32 @@ try:
             })
         except:
             pass
+except:
+    pass
+
+# --- Completed sessions (JSONL scan — supplements broken/missing telemetry) ---
+_month_cutoff_epoch = (now_utc - timedelta(days=30)).timestamp()
+completed_session_ids = set()
+try:
+    for proj_dir in os.listdir(projects_dir):
+        proj_path = os.path.join(projects_dir, proj_dir)
+        if not os.path.isdir(proj_path):
+            continue
+        for fname in os.listdir(proj_path):
+            if not fname.endswith(".jsonl"):
+                continue
+            sid = fname[:-6]
+            if sid in active_session_ids:
+                continue
+            fpath = os.path.join(proj_path, fname)
+            try:
+                if os.path.getmtime(fpath) < _month_cutoff_epoch:
+                    continue
+            except:
+                continue
+            completed_session_ids.add(sid)
+            _process_jsonl_cached(fpath)
+            _process_subagents_cached(proj_path, sid)
 except:
     pass
 
@@ -325,7 +437,7 @@ try:
                 except:
                     continue
                 session_id = meta.get("last_session_id", "")
-                if not session_id or session_id in active_session_ids:
+                if not session_id or session_id in active_session_ids or session_id in completed_session_ids:
                     continue
                 cost = meta.get("last_session_cost", 0)
                 inp = meta.get("last_session_total_input_tokens", 0)
@@ -390,6 +502,12 @@ try:
     os.makedirs(cache_dir, exist_ok=True)
     with open(daily_cache_file, "w") as f:
         json.dump(daily_token_map, f)
+    # Prune stale entries from jsonl_cache (files older than 90 days or deleted)
+    _prune_cutoff = (now_utc - timedelta(days=90)).timestamp()
+    jsonl_cache = {k: v for k, v in jsonl_cache.items()
+                   if v.get("mt", 0) >= _prune_cutoff}
+    with open(jsonl_cache_file, "w") as f:
+        json.dump(jsonl_cache, f)
 except:
     pass
 
