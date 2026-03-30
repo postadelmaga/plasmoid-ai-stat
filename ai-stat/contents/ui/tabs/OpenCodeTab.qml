@@ -83,14 +83,16 @@ Flickable {
         }
 
         // Section 3: Dashboard — Tachometer ONLY (centered, no quota rings)
-        ColumnLayout {
-            Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing
-            spacing: Kirigami.Units.smallSpacing
+        Item {
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.smallSpacing
+            property real _tachoW: appRoot.onDesktop ? Kirigami.Units.gridUnit * 10 : Kirigami.Units.gridUnit * 8
+            implicitHeight: _tachoW * 0.72
 
             Tachometer {
-                Layout.preferredWidth: appRoot.onDesktop ? Kirigami.Units.gridUnit * 10 : Kirigami.Units.gridUnit * 8
-                Layout.preferredHeight: Layout.preferredWidth * 0.72
-                Layout.alignment: Qt.AlignHCenter
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent._tachoW
+                height: parent._tachoW * 0.72
                 value: appRoot.ocInstantAllRate
                 avgValue: appRoot.ocRateAll30m
                 maxValue: 300000000
