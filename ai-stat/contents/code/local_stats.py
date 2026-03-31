@@ -30,7 +30,7 @@ daily_cache_file = os.path.join(cache_dir, "daily_tokens.json")
 jsonl_cache_file = os.path.join(cache_dir, "jsonl_cache.json")
 
 TIER_LIMITS = {
-    "default_claude_max_5x": {"label": "Max 5x", "input_tokens_per_day": 500_000_000, "output_tokens_per_day": 50_000_000},
+    "default_claude_max_5x": {"label": "Max 5x", "input_tokens_per_day": 1_500_000_000, "output_tokens_per_day": 150_000_000},
     "default_claude_max":    {"label": "Max",    "input_tokens_per_day": 300_000_000, "output_tokens_per_day": 30_000_000},
     "default_claude_pro":    {"label": "Pro",    "input_tokens_per_day": 100_000_000, "output_tokens_per_day": 10_000_000},
     "default_claude_team":   {"label": "Team",   "input_tokens_per_day": 200_000_000, "output_tokens_per_day": 20_000_000},
@@ -40,10 +40,11 @@ now_utc = datetime.now(timezone.utc)
 now_ms = now_utc.timestamp() * 1000
 now_local = datetime.now()
 
-RL_DAY_START_HOUR_UTC = 3
+RL_DAY_START_HOUR_UTC = 2
 rl_day_start = now_utc.replace(hour=RL_DAY_START_HOUR_UTC, minute=0, second=0, microsecond=0)
 if now_utc < rl_day_start:
     rl_day_start -= timedelta(days=1)
+rl_day_start_ms = rl_day_start.timestamp() * 1000
 
 local_midnight = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
 today_ts = local_midnight.timestamp() * 1000

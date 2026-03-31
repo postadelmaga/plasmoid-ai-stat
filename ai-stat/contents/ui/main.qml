@@ -248,6 +248,7 @@ PlasmoidItem {
         interval: 30000
         running: root.expanded || root.onDesktop
         repeat: true
+        triggeredOnStart: true
         onTriggered: root.tick++
     }
 
