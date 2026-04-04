@@ -37,8 +37,9 @@ plasmashell --replace &
 ```
 local_stats.py        ──→ JSON ──→ main.qml (updateClaude)
 gemini_local_stats.py ──→ JSON ──→ main.qml (updateGeminiCli)
+pi_stats.py           ──→ JSON ──→ main.qml (updatePi)
 gemini_stats.py       ──→ JSON ──→ main.qml (updateGemini)
-/proc/pid/io          ──→ grep ──→ main.qml (instantRate / gcliInstantRate)
+/proc/pid/io          ──→ grep ──→ main.qml (instantRate / gcliInstantRate / piInstantRate)
 ```
 
 `main.qml` uses `Plasma5Support.DataSource` with engine `"executable"` to run the Python scripts on a timer (`refreshInterval`, default 300s). The scripts output JSON to stdout which gets parsed and mapped to QML properties.
@@ -58,15 +59,21 @@ gemini_stats.py       ──→ JSON ──→ main.qml (updateGemini)
   - Counts API requests per day for quota tracking
   - Detects active processes via pgrep (parent + child PIDs)
 
+- **`pi_stats.py`** — Parses `~/.pi/agent/` data:
+  - `settings.json` → provider, model, thinking level
+  - `sessions/*/*.jsonl` → per-message token usage (input, output, cacheRead, cacheWrite) and costs
+  - Detects active processes via `pgrep -x pi` (parent + child PIDs)
+
 - **`gemini_stats.py`** — Uses `countTokens` endpoint (free, no quota impact) to check API availability
 
 - **`formatters.js`** — Formatting helpers: `formatTokens()`, `formatCost()`, `formatDuration()`, `tierLabel()`, `shortModel()`
 
 ### UI Components (`contents/ui/`)
 
-- **`main.qml`** — Root `PlasmoidItem` with compact/full representations, three tabs (Claude/Gemini CLI/Gemini API), all state properties, I/O polling
+- **`main.qml`** — Root `PlasmoidItem` with compact/full representations, tabs (Summary/Claude/Gemini CLI/Antigravity/Pi/OpenCode/Gemini API), all state properties, I/O polling
 - **`ClaudeTab.qml`** — Claude dashboard with quota rings, tachometer, charts, sessions
 - **`GeminiCliTab.qml`** — Gemini CLI dashboard (mirrors Claude layout)
+- **`PiTab.qml`** — Pi dashboard with dual quota rings, tachometer, costs, charts, sessions
 - **`GeminiTab.qml`** — Gemini API rate limits and models
 - **`Tachometer.qml`** — Car-style gauge with split canvas (static bg / dynamic arc), animated needle with jitter
 - **`DualQuotaRing.qml`** — Concentric input/output rings with glow
@@ -82,7 +89,7 @@ gemini_stats.py       ──→ JSON ──→ main.qml (updateGemini)
 - **Token types** (Gemini CLI): `input`, `output`, `cached`, `thoughts`, `tool`, `total`.
 - **Tier limits** (Claude): Hardcoded in `TIER_LIMITS` dict. Per-window limit = daily limit / 5.
 - **Tier limits** (Gemini CLI): Request-based (1000/1500/2000 per day depending on tier).
-- **I/O Polling**: `/proc/pid/io` rchar polling at 1s for both Claude and Gemini CLI processes. Gemini CLI requires polling child processes (worker node) not just the launcher.
+- **I/O Polling**: `/proc/pid/io` rchar polling at 1s for Claude, Gemini CLI, Pi, and OpenCode processes. Gemini CLI requires polling child processes (worker node) not just the launcher. Pi process name is `pi` (exact match via `pgrep -x`).
 
 ## Plasma 6 / QML Notes
 

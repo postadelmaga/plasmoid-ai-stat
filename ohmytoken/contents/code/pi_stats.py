@@ -282,16 +282,14 @@ for i in range(total_buckets - 1, -1, -1):
 active_sessions = []
 active_count = 0
 try:
-    result = subprocess.run(["pgrep", "-af", "pi-coding-agent"], capture_output=True, text=True, timeout=2)
+    # pi binary is a symlink to pi-coding-agent's cli.js, process name is just "pi"
+    result = subprocess.run(["pgrep", "-x", "pi"], capture_output=True, text=True, timeout=2)
     seen_pids = set()
     for line in result.stdout.strip().split("\n"):
-        if not line or "pgrep" in line or "pi_stats" in line:
-            continue
-        parts = line.split(None, 1)
-        if not parts:
+        if not line:
             continue
         try:
-            pid = int(parts[0])
+            pid = int(line.strip())
             if not os.path.exists(f"/proc/{pid}"):
                 continue
             if pid in seen_pids:
@@ -316,7 +314,7 @@ try:
                             pass
             except:
                 pass
-            active_sessions.append({"pid": pid, "pids": all_pids, "cmd": parts[1] if len(parts) > 1 else ""})
+            active_sessions.append({"pid": pid, "pids": all_pids, "cmd": "pi"})
         except:
             pass
 except:

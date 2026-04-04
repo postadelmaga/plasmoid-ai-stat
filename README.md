@@ -12,6 +12,7 @@
 |------|-----------|-----------|--------|
 | **Claude Code** | `~/.claude/` telemetry, sessions, JSONL | `/proc/pid/io` 1s polling | Session window + daily (auto-detected tier) |
 | **Gemini CLI** | `~/.gemini/` chat sessions | `/proc/pid/io` child worker polling | Requests/day by tier |
+| **Pi** | `~/.pi/agent/sessions/` JSONL | `/proc/pid/io` polling | Token + cost tracking |
 | **OpenCode** | `~/.local/share/opencode/` SQLite DB | `/proc/pid/io` polling | Token tracking |
 | **Antigravity IDE** | Language server local API | Status endpoint polling | Prompt + Flow credits |
 | **Gemini API** | `countTokens` endpoint (free) | -- | Rate limits (requests + tokens) |
@@ -96,6 +97,7 @@ Right-click the widget and select **Configure...**.
 |---------|---------|-------------|
 | Claude Code | On | Monitor `~/.claude/` telemetry and sessions |
 | Gemini CLI | On | Monitor `~/.gemini/` chat sessions |
+| Pi | On | Monitor `~/.pi/agent/` sessions and usage |
 | OpenCode | On | Monitor `~/.local/share/opencode/` SQLite database |
 | Antigravity | On | Monitor via language server API (auto-discovered) |
 | Gemini API | Off | Requires API key -- get one at [ai.google.dev](https://ai.google.dev) |
@@ -132,6 +134,7 @@ Gemini CLI tier is detected from `~/.gemini/settings.json` (Free: 1000, Standard
 ```
 local_stats.py        ----> JSON ----> main.qml (Claude)
 gemini_local_stats.py ----> JSON ----> main.qml (Gemini CLI)
+pi_stats.py           ----> JSON ----> main.qml (Pi)
 opencode_stats.py     ----> JSON ----> main.qml (OpenCode)
 antigravity_stats.py  ----> JSON ----> main.qml (Antigravity)
 gemini_stats.py       ----> JSON ----> main.qml (Gemini API)
@@ -139,7 +142,7 @@ gemini_stats.py       ----> JSON ----> main.qml (Gemini API)
 ```
 
 - **Backend**: Python scripts parse local data files, SQLite databases, and local APIs. Output JSON to stdout.
-- **Real-time**: `/proc/pid/io` rchar polling at 1s for Claude, Gemini CLI, and OpenCode processes. Language server endpoint polling for Antigravity.
+- **Real-time**: `/proc/pid/io` rchar polling at 1s for Claude, Gemini CLI, Pi, and OpenCode processes. Language server endpoint polling for Antigravity.
 - **Rendering**: Split Canvas layers (static background / dynamic arcs) with GPU-composited needle rotation for minimal CPU impact. Jitter animation only runs during active streaming.
 
 ## Requirements
@@ -147,7 +150,7 @@ gemini_stats.py       ----> JSON ----> main.qml (Gemini API)
 - KDE Plasma 6
 - Python 3
 - Linux (requires `/proc` filesystem for real-time I/O monitoring)
-- One or more of: Claude Code, Gemini CLI, OpenCode, Antigravity IDE
+- One or more of: Claude Code, Gemini CLI, Pi, OpenCode, Antigravity IDE
 
 ## License
 
