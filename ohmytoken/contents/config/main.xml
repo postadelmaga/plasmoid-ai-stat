@@ -40,5 +40,8 @@
         <entry name="enableOpenCode" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="enablePi" type="Bool">
+            <default>true</default>
+        </entry>
     </group>
 </kcfg>

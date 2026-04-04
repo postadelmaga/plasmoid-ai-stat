@@ -26,6 +26,7 @@ Flickable {
         if (appRoot.enableGeminiCli) t += appRoot.gcliTokInToday + appRoot.gcliTokOutToday
         if (appRoot.enableAntigravity) t += appRoot.agTokInToday + appRoot.agTokOutToday
         if (appRoot.enableOpenCode) t += appRoot.ocTokInToday + appRoot.ocTokOutToday
+        if (appRoot.enablePi) t += appRoot.piTokInToday + appRoot.piTokOutToday
         return t
     }
     readonly property double totalTokWeek: {
@@ -34,6 +35,7 @@ Flickable {
         if (appRoot.enableGeminiCli) t += appRoot.gcliTokInWeek + appRoot.gcliTokOutWeek
         if (appRoot.enableAntigravity) t += appRoot.agTokInWeek + appRoot.agTokOutWeek
         if (appRoot.enableOpenCode) t += appRoot.ocTokInWeek + appRoot.ocTokOutWeek
+        if (appRoot.enablePi) t += appRoot.piTokInWeek + appRoot.piTokOutWeek
         return t
     }
     readonly property double totalTokMonth: {
@@ -42,6 +44,7 @@ Flickable {
         if (appRoot.enableGeminiCli) t += appRoot.gcliTokInMonth + appRoot.gcliTokOutMonth
         if (appRoot.enableAntigravity) t += appRoot.agTokInMonth + appRoot.agTokOutMonth
         if (appRoot.enableOpenCode) t += appRoot.ocTokInMonth + appRoot.ocTokOutMonth
+        if (appRoot.enablePi) t += appRoot.piTokInMonth + appRoot.piTokOutMonth
         return t
     }
     readonly property int totalActiveSessions: {
@@ -49,11 +52,12 @@ Flickable {
         if (appRoot.enableClaude) n += appRoot.activeSessions
         if (appRoot.enableGeminiCli) n += appRoot.gcliActiveSessions
         if (appRoot.enableOpenCode) n += appRoot.ocActiveSessions
+        if (appRoot.enablePi) n += appRoot.piActiveSessions
         return n
     }
-    readonly property real combinedRate: Math.max(appRoot.instantAllRate, appRoot.gcliInstantAllRate, appRoot.ocInstantAllRate, appRoot.agInstantAllRate)
-    readonly property real combinedOutputRate: Math.max(appRoot.instantOutputRate, appRoot.gcliInstantOutputRate, appRoot.ocInstantOutputRate, appRoot.agInstantOutputRate)
-    readonly property real combinedAvg: Math.max(appRoot.rateAll30m, appRoot.gcliRateAll30m, appRoot.ocRateAll30m, appRoot.agRateAll30m)
+    readonly property real combinedRate: Math.max(appRoot.instantAllRate, appRoot.gcliInstantAllRate, appRoot.ocInstantAllRate, appRoot.agInstantAllRate, appRoot.piInstantAllRate)
+    readonly property real combinedOutputRate: Math.max(appRoot.instantOutputRate, appRoot.gcliInstantOutputRate, appRoot.ocInstantOutputRate, appRoot.agInstantOutputRate, appRoot.piInstantOutputRate)
+    readonly property real combinedAvg: Math.max(appRoot.rateAll30m, appRoot.gcliRateAll30m, appRoot.ocRateAll30m, appRoot.agRateAll30m, appRoot.piRateAll30m)
 
     ColumnLayout {
         id: summaryCol
@@ -130,7 +134,7 @@ Flickable {
                 visible: appRoot.enableClaude
                 Layout.fillWidth: true
                 providerName: "Claude"
-                iconName: "preferences-system-performance"
+                iconSource: Qt.resolvedUrl("../icons/claude.svg")
                 tokToday: appRoot.tokInToday + appRoot.tokOutToday
                 tokWeek: appRoot.tokInWeek + appRoot.tokOutWeek
                 activeSessions: appRoot.activeSessions
@@ -143,7 +147,7 @@ Flickable {
                 visible: appRoot.enableGeminiCli
                 Layout.fillWidth: true
                 providerName: "Gemini CLI"
-                iconName: "akonadiconsole"
+                iconSource: Qt.resolvedUrl("../icons/gemini.png")
                 tokToday: appRoot.gcliTokInToday + appRoot.gcliTokOutToday
                 tokWeek: appRoot.gcliTokInWeek + appRoot.gcliTokOutWeek
                 activeSessions: appRoot.gcliActiveSessions
@@ -156,7 +160,7 @@ Flickable {
                 visible: appRoot.enableAntigravity
                 Layout.fillWidth: true
                 providerName: "Antigravity"
-                iconName: "code-context"
+                iconSource: Qt.resolvedUrl("../icons/antigravity.png")
                 tokToday: appRoot.agTokInToday + appRoot.agTokOutToday
                 tokWeek: appRoot.agTokInWeek + appRoot.agTokOutWeek
                 activeSessions: 0
@@ -169,11 +173,24 @@ Flickable {
                 visible: appRoot.enableOpenCode
                 Layout.fillWidth: true
                 providerName: "OpenCode"
-                iconName: "utilities-terminal"
+                iconSource: Qt.resolvedUrl("../icons/opencode.svg")
                 tokToday: appRoot.ocTokInToday + appRoot.ocTokOutToday
                 tokWeek: appRoot.ocTokInWeek + appRoot.ocTokOutWeek
                 activeSessions: appRoot.ocActiveSessions
                 accentColor: Kirigami.Theme.linkColor
+                totalToday: summaryTab.totalTokToday
+            }
+
+            // Pi
+            ProviderRow {
+                visible: appRoot.enablePi
+                Layout.fillWidth: true
+                providerName: "Pi"
+                iconSource: Qt.resolvedUrl("../icons/pi.svg")
+                tokToday: appRoot.piTokInToday + appRoot.piTokOutToday
+                tokWeek: appRoot.piTokInWeek + appRoot.piTokOutWeek
+                activeSessions: appRoot.piActiveSessions
+                accentColor: Kirigami.Theme.visitedLinkColor
                 totalToday: summaryTab.totalTokToday
             }
         }
@@ -191,6 +208,7 @@ Flickable {
                 if (appRoot.enableGeminiCli) all = all.concat(appRoot.gcliFineTokens)
                 if (appRoot.enableAntigravity) all = all.concat(appRoot.agFineTokens)
                 if (appRoot.enableOpenCode) all = all.concat(appRoot.ocFineTokens)
+                if (appRoot.enablePi) all = all.concat(appRoot.piFineTokens)
                 return all
             }
 
@@ -214,6 +232,7 @@ Flickable {
                 if (appRoot.enableGeminiCli) all = all.concat(appRoot.gcliDailyTokens)
                 if (appRoot.enableAntigravity) all = all.concat(appRoot.agDailyTokens)
                 if (appRoot.enableOpenCode) all = all.concat(appRoot.ocDailyTokens)
+                if (appRoot.enablePi) all = all.concat(appRoot.piDailyTokens)
                 return all
             }
 
@@ -237,7 +256,7 @@ Flickable {
     component ProviderRow: Rectangle {
         id: provRow
         property string providerName: ""
-        property string iconName: ""
+        property url iconSource: ""
         property double tokToday: 0
         property double tokWeek: 0
         property int activeSessions: 0
@@ -264,10 +283,11 @@ Flickable {
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: Kirigami.Units.smallSpacing }
             spacing: Kirigami.Units.smallSpacing
 
-            Kirigami.Icon {
-                source: provRow.iconName
+            Image {
+                source: provRow.iconSource
                 Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
                 Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                sourceSize: Qt.size(width, height)
                 opacity: 0.7
             }
 

@@ -187,6 +187,43 @@ PlasmoidItem {
     readonly property real ocInstantAllRate: ocInstantRate * (ocRateAll5m > 0 ? ocRateAll5m : ocRateAll30m)
     readonly property real ocInstantOutputRate: ocInstantRate * (ocRateOutput5m > 0 ? ocRateOutput5m : ocRateOutput30m)
     property bool enableOpenCode: plasmoid.configuration.enableOpenCode !== false
+    property bool enablePi: plasmoid.configuration.enablePi !== false
+
+    // ── Pi state ──
+    property bool piLoading: false
+    property string piProvider: ""
+    property string piModel: ""
+    property string piThinkingLevel: ""
+    property int piActiveSessions: 0
+    property int piTotalSessions: 0
+    property int piPromptsToday: 0
+    property int piPromptsWeek: 0
+    property int piPromptsMonth: 0
+    property double piTokInToday: 0
+    property double piTokOutToday: 0
+    property double piTokInWeek: 0
+    property double piTokOutWeek: 0
+    property double piTokInMonth: 0
+    property double piTokOutMonth: 0
+    property double piCostToday: 0
+    property double piCostWeek: 0
+    property double piCostMonth: 0
+    property var piDailyTokens: []
+    property var piFineTokens: []
+    property var piRecentSessions: []
+    property var piModelsUsed: ({})
+    property real piRateOutput5m: 0
+    property real piRateOutput30m: 0
+    property real piRateAll5m: 0
+    property real piRateAll30m: 0
+    property var _piPids: []
+    property var _piPrevRchar: ({})
+    property real piInstantRate: 0
+    property int _piIdleTicks: 0
+    property int _piActiveSince: 0
+    property real _piPeakBps: 10000
+    readonly property real piInstantAllRate: piInstantRate * (piRateAll5m > 0 ? piRateAll5m : piRateAll30m)
+    readonly property real piInstantOutputRate: piInstantRate * (piRateOutput5m > 0 ? piRateOutput5m : piRateOutput30m)
 
     Plasma5Support.DataSource {
         id: agPollSource
@@ -262,7 +299,10 @@ PlasmoidItem {
         connectedSources: []
         onNewData: (source, data) => {
             var stdout = data.stdout.trim()
-            if (source.indexOf("opencode_stats") >= 0) {
+            if (source.indexOf("pi_stats") >= 0) {
+                if (stdout) { try { updatePi(JSON.parse(stdout)) } catch(e) { console.log("Pi parse error:", e) } }
+                piLoading = false
+            } else if (source.indexOf("opencode_stats") >= 0) {
                 if (stdout) { try { updateOpenCode(JSON.parse(stdout)) } catch(e) { console.log("OpenCode parse error:", e) } }
                 ocLoading = false
             } else if (source.indexOf("antigravity_stats") >= 0) {
@@ -382,6 +422,26 @@ PlasmoidItem {
             if (ocHasPrev) _updateRate(ocMaxBps, "_ocActiveSince", "_ocIdleTicks", "_ocPeakBps", "ocInstantRate")
             else if (root._ocPids.length === 0) { root.ocInstantRate = 0 }
 
+            // Update Pi rate
+            var piPidSet = {}
+            for (var pi2 = 0; pi2 < root._piPids.length; pi2++) piPidSet[root._piPids[pi2]] = true
+            var piMaxBps = 0, piHasPrev = false
+            for (var pi3 = 0; pi3 < lines.length; pi3++) {
+                var pline = lines[pi3]
+                var pPidStart = pline.indexOf("/proc/") + 6
+                var pPidEnd = pline.indexOf("/io:")
+                if (pPidStart < 6 || pPidEnd < 0) continue
+                var pPid = pline.substring(pPidStart, pPidEnd)
+                if (!piPidSet[pPid]) continue
+                var pRchar = parseInt(pline.substring(pline.lastIndexOf(" ") + 1))
+                if (isNaN(pRchar)) continue
+                var pPrev = root._piPrevRchar[pPid] || 0
+                if (pPrev > 0) { var pBps = pRchar - pPrev; if (pBps > piMaxBps) piMaxBps = pBps; piHasPrev = true }
+                root._piPrevRchar[pPid] = pRchar
+            }
+            if (piHasPrev) _updateRate(piMaxBps, "_piActiveSince", "_piIdleTicks", "_piPeakBps", "piInstantRate")
+            else if (root._piPids.length === 0) { root.piInstantRate = 0 }
+
             disconnectSource(source)
         }
     }
@@ -412,14 +472,14 @@ PlasmoidItem {
 
     property int _pollSeq: 0
     property bool _pollPending: false
-    property bool _hasAnyPids: (root.enableClaude && root._sessionPids.length > 0) || (root.enableGeminiCli && root._gcliPids.length > 0) || (root.enableOpenCode && root._ocPids.length > 0)
+    property bool _hasAnyPids: (root.enableClaude && root._sessionPids.length > 0) || (root.enableGeminiCli && root._gcliPids.length > 0) || (root.enableOpenCode && root._ocPids.length > 0) || (root.enablePi && root._piPids.length > 0)
     Timer {
         interval: 1000
         running: root._hasAnyPids && (root.expanded || root.onDesktop || root.compactStyle === "tacho")
         repeat: true
         onTriggered: {
             if (root._pollPending) return
-            var allPids = root._sessionPids.concat(root._gcliPids).concat(root._ocPids)
+            var allPids = root._sessionPids.concat(root._gcliPids).concat(root._ocPids).concat(root._piPids)
             if (allPids.length === 0) return
             root._pollPending = true
             root._pollSeq = 1 - root._pollSeq
@@ -433,7 +493,7 @@ PlasmoidItem {
 
     // ── Timers ──
     Timer {
-        interval: (root.activeSessions > 0 || root.gcliActiveSessions > 0) ? 30000 : root.refreshInterval * 1000
+        interval: (root.activeSessions > 0 || root.gcliActiveSessions > 0 || root.piActiveSessions > 0) ? 30000 : root.refreshInterval * 1000
         running: true; repeat: true; triggeredOnStart: true
         onTriggered: refreshAll()
     }
@@ -471,6 +531,12 @@ PlasmoidItem {
             ocLoading = true
             var ocScript = Qt.resolvedUrl("../code/opencode_stats.py").toString().replace("file://", "")
             executable.connectSource("python3 " + ocScript)
+        }
+
+        if (enablePi) {
+            piLoading = true
+            var piScript = Qt.resolvedUrl("../code/pi_stats.py").toString().replace("file://", "")
+            executable.connectSource("python3 " + piScript)
         }
     }
 
@@ -671,6 +737,56 @@ PlasmoidItem {
         if (pidsChanged) _ocPrevRchar = {}
     }
 
+    function updatePi(p) {
+        var s = p.settings || {}
+        piProvider = s.provider || ""
+        piModel = s.model || ""
+        piThinkingLevel = s.thinking_level || ""
+        piActiveSessions = (p.sessions || {}).active || 0
+        piTotalSessions = (p.sessions || {}).total || 0
+        piPromptsToday = (p.prompts || {}).today || 0
+        piPromptsWeek = (p.prompts || {}).week || 0
+        piPromptsMonth = (p.prompts || {}).month || 0
+        var t = p.tokens || {}
+        var td = t.today || {}; var tw = t.week || {}; var tm = t.month || {}
+        piTokInToday = (td.input || 0) + (td.cache_read || 0) + (td.cache_write || 0)
+        piTokOutToday = td.output || 0
+        piTokInWeek = (tw.input || 0) + (tw.cache_read || 0) + (tw.cache_write || 0)
+        piTokOutWeek = tw.output || 0
+        piTokInMonth = (tm.input || 0) + (tm.cache_read || 0) + (tm.cache_write || 0)
+        piTokOutMonth = tm.output || 0
+        var c = p.cost || {}
+        piCostToday = c.today || 0
+        piCostWeek = c.week || 0
+        piCostMonth = c.month || 0
+        if (p.throughput) {
+            piRateOutput5m = p.throughput.rate_output_5m || 0
+            piRateOutput30m = p.throughput.rate_output_30m || 0
+            piRateAll5m = p.throughput.rate_all_5m || 0
+            piRateAll30m = p.throughput.rate_all_30m || 0
+        }
+        piDailyTokens = p.daily_tokens || []
+        piFineTokens = p.fine_tokens || []
+        piRecentSessions = p.recent_sessions || []
+        piModelsUsed = p.models_used || {}
+        // Extract PIDs for I/O polling
+        var pids = []
+        var sessions = p.active_sessions || []
+        for (var i = 0; i < sessions.length; i++) {
+            var spids = sessions[i].pids || []
+            for (var k = 0; k < spids.length; k++) pids.push(String(spids[k]))
+            if (spids.length === 0 && sessions[i].pid) pids.push(String(sessions[i].pid))
+        }
+        var pidsChanged = pids.length !== _piPids.length
+        if (!pidsChanged) {
+            for (var j = 0; j < pids.length; j++) {
+                if (pids[j] !== _piPids[j]) { pidsChanged = true; break }
+            }
+        }
+        _piPids = pids
+        if (pidsChanged) _piPrevRchar = {}
+    }
+
     // ─── Compact Representation ───
     compactRepresentation: Item {
         Layout.minimumWidth: compactRow.implicitWidth + Kirigami.Units.smallSpacing * 2
@@ -725,7 +841,7 @@ PlasmoidItem {
                 Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                 visible: root.compactStyle === "tacho"
 
-                property real pct: Math.max(root.instantRate, root.gcliInstantRate, root.ocInstantRate)
+                property real pct: Math.max(root.instantRate, root.gcliInstantRate, root.ocInstantRate, root.piInstantRate)
                 readonly property real _startRad: 3 * Math.PI / 4
                 readonly property real _sweepRad: 3 * Math.PI / 2
                 readonly property color _color: pct > 0.8 ? Kirigami.Theme.negativeTextColor
@@ -817,39 +933,87 @@ PlasmoidItem {
                 Kirigami.Theme.inherit: false
 
                 QQC2.TabButton {
-                    text: "\u2728"
-                    icon.name: "view-statistics"
+                    icon.source: Qt.resolvedUrl("icons/summary.svg")
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.text: i18n("Summary")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: 500
                     Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
                     Kirigami.Theme.inherit: false
                 }
                 QQC2.TabButton {
                     visible: root.enableClaude
-                    text: "Claude"
-                    icon.name: "preferences-system-performance"
+                    icon.source: Qt.resolvedUrl("icons/claude.svg")
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.text: i18n("Claude")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: 500
                     Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
                     Kirigami.Theme.inherit: false
                 }
                 QQC2.TabButton {
                     visible: root.enableGeminiCli
-                    text: "Gemini CLI"
-                    icon.name: "akonadiconsole"
+                    icon.source: Qt.resolvedUrl("icons/gemini.png")
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.text: i18n("Gemini CLI")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: 500
+                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                    Kirigami.Theme.inherit: false
                 }
                 QQC2.TabButton {
                     visible: root.enableAntigravity
-                    text: "Antigravity"
-                    icon.name: "code-context"
+                    icon.source: Qt.resolvedUrl("icons/antigravity.png")
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.text: i18n("Antigravity / Windsurf")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: 500
+                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                    Kirigami.Theme.inherit: false
+                }
+                QQC2.TabButton {
+                    visible: root.enablePi
+                    icon.source: Qt.resolvedUrl("icons/pi.svg")
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.text: i18n("Pi")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: 500
+                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                    Kirigami.Theme.inherit: false
                 }
                 QQC2.TabButton {
                     visible: root.enableOpenCode
-                    text: "OpenCode"
-                    icon.name: "utilities-terminal"
+                    icon.source: Qt.resolvedUrl("icons/opencode.svg")
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.text: i18n("OpenCode")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: 500
                     Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
                     Kirigami.Theme.inherit: false
                 }
                 QQC2.TabButton {
                     visible: root.enableGeminiApi
-                    text: "Gemini API"
-                    icon.name: "applications-science"
+                    icon.source: Qt.resolvedUrl("icons/gemini.png")
+                    icon.width: Kirigami.Units.iconSizes.smallMedium
+                    icon.height: Kirigami.Units.iconSizes.smallMedium
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.text: i18n("Gemini API")
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.delay: 500
+                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                    Kirigami.Theme.inherit: false
                 }
             }
 
@@ -859,6 +1023,7 @@ PlasmoidItem {
                 if (root.enableClaude) m.push("claude")
                 if (root.enableGeminiCli) m.push("gcli")
                 if (root.enableAntigravity) m.push("ag")
+                if (root.enablePi) m.push("pi")
                 if (root.enableOpenCode) m.push("oc")
                 if (root.enableGeminiApi) m.push("gemini")
                 return m
@@ -888,6 +1053,11 @@ PlasmoidItem {
                     visible: root.enableAntigravity
                     active: fullRepCol._activeTab === "ag"
                     sourceComponent: Component { AntigravityTab { appRoot: root } }
+                }
+                Loader {
+                    visible: root.enablePi
+                    active: fullRepCol._activeTab === "pi"
+                    sourceComponent: Component { PiTab { appRoot: root } }
                 }
                 Loader {
                     visible: root.enableOpenCode
