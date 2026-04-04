@@ -5,7 +5,7 @@ Called every 2s by QML for tachometer. Returns running status + step delta."""
 import json, os, subprocess, sys, re
 from urllib.request import Request, urlopen
 
-CACHE_DIR = os.path.expanduser("~/.cache/ai-stat")
+CACHE_DIR = os.path.expanduser("~/.cache/ohmytoken")
 CACHE_FILE = os.path.join(CACHE_DIR, "ag_poll_state.json")
 CONN_CACHE = os.path.join(CACHE_DIR, "ag_conn.json")
 

@@ -25,7 +25,7 @@ telemetry_dir = os.path.join(claude_dir, "telemetry")
 sessions_dir = os.path.join(claude_dir, "sessions")
 projects_dir = os.path.join(claude_dir, "projects")
 
-cache_dir = os.path.expanduser("~/.cache/ai-stat")
+cache_dir = os.path.expanduser("~/.cache/ohmytoken")
 daily_cache_file = os.path.join(cache_dir, "daily_tokens.json")
 jsonl_cache_file = os.path.join(cache_dir, "jsonl_cache.json")
 

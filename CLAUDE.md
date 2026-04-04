@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-KDE Plasma 6 plasmoid (widget) — **AI Stat** — that displays real-time usage stats for Claude Code, Gemini CLI, and Gemini API. It reads local data files (`~/.claude/`, `~/.gemini/`) and queries the Gemini API, then presents token usage, session info, throughput tachometers, and quota rings in a panel widget.
+KDE Plasma 6 plasmoid (widget) — **OhMyToken** — that displays real-time usage stats for Claude Code, Gemini CLI, and Gemini API. It reads local data files (`~/.claude/`, `~/.gemini/`) and queries the Gemini API, then presents token usage, session info, throughput tachometers, and quota rings in a panel widget.
 
 ## Development Setup
 
 The installed widget is a **symlink** to the source directory:
 ```
-~/.local/share/plasma/plasmoids/ai-stat -> /home/fra/Dev/Plasma/plasmoid-ClaudeStat/ai-stat
+~/.local/share/plasma/plasmoids/ohmytoken -> /home/fra/Dev/Plasma/plasmoid-ClaudeStat/ohmytoken
 ```
 **NEVER delete or `rm -rf` the installed path** — it would destroy the source files. Changes to source files are live immediately; just reload the widget.
 
@@ -19,10 +19,10 @@ The installed widget is a **symlink** to the source directory:
 bash build.sh
 
 # Upgrade if not using symlink
-kpackagetool6 -t Plasma/Applet -u ai-stat.plasmoid
+kpackagetool6 -t Plasma/Applet -u ohmytoken.plasmoid
 
 # Test in viewer
-plasmoidviewer -a ai-stat
+plasmoidviewer -a ohmytoken
 
 # Refresh KDE cache after metadata changes
 kbuildsycoca6

@@ -1,9 +1,9 @@
-# AI Stat
+# OhMyToken
 
 Real-time KDE Plasma 6 widget for monitoring AI coding assistants — Claude Code, Gemini CLI, Antigravity IDE, and Gemini API. Token quotas, session throughput, cost tracking, and more.
 
 <p align="center">
-  <img src="screenshots/main.png" alt="AI Stat widget" width="420"/>
+  <img src="screenshots/main.png" alt="OhMyToken widget" width="420"/>
 </p>
 
 ## Features
@@ -36,14 +36,14 @@ Real-time KDE Plasma 6 widget for monitoring AI coding assistants — Claude Cod
 
 ```bash
 bash build.sh
-kpackagetool6 -t Plasma/Applet -i ai-stat.plasmoid
+kpackagetool6 -t Plasma/Applet -i ohmytoken.plasmoid
 ```
 
 ### Upgrade
 
 ```bash
 bash build.sh
-kpackagetool6 -t Plasma/Applet -u ai-stat.plasmoid
+kpackagetool6 -t Plasma/Applet -u ohmytoken.plasmoid
 ```
 
 ## Configuration

@@ -28,13 +28,13 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: plasmoid-package
-        path: ai-stat.plasmoid
+        path: ohmytoken.plasmoid
         retention-days: 30
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
-        files: ai-stat.plasmoid
+        files: ohmytoken.plasmoid
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

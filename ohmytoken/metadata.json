@@ -1,8 +1,8 @@
 {
     "KPackageStructure": "Plasma/Applet",
     "KPlugin": {
-        "Id": "ai-stat",
-        "Name": "AI Stat",
+        "Id": "ohmytoken",
+        "Name": "OhMyToken",
         "Description": "Real-time AI coding assistant dashboard — Claude, Gemini CLI, token quotas and throughput",
         "Icon": "preferences-system-performance",
         "Authors": [
