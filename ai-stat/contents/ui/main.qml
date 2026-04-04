@@ -290,6 +290,8 @@ PlasmoidItem {
     //
     property var _sessionPids: []       // PIDs of active sessions
     property var _prevRchar: ({})       // pid -> previous rchar value
+    property var _pidHold: ({})         // pid -> hold counter for per-pid activity
+    property var pidActivity: ({})      // pid -> bool, exposed to cards
     property real instantRate: 0        // activity factor 0-1 (0=idle, 1=streaming)
     property int _idleTicks: 0
     property int _activeSince: 0        // hold counter after last activity detection
@@ -314,6 +316,7 @@ PlasmoidItem {
             var lines = stdout.split("\n")
             var claudeMaxBps = 0, gcliMaxBps = 0, ocMaxBps = 0
             var claudeHasPrev = false, gcliHasPrev = false, ocHasPrev = false
+            var pidBps = {}  // per-pid bps for activity tracking
 
             // Build PID lookup sets
             var claudePidSet = {}
@@ -340,12 +343,32 @@ PlasmoidItem {
 
                 if (prev > 0) {
                     var bps = (rchar - prev)
+                    pidBps[pid] = bps
                     if (isClaude) { if (bps > claudeMaxBps) claudeMaxBps = bps; claudeHasPrev = true }
                     if (isGcli) { if (bps > gcliMaxBps) gcliMaxBps = bps; gcliHasPrev = true }
                     if (isOc) { if (bps > ocMaxBps) ocMaxBps = bps; ocHasPrev = true }
                 }
                 prevMap[pid] = rchar
             }
+
+            // Update per-PID activity map (with 3-tick hold)
+            var hold = root._pidHold
+            var act = {}
+            for (var p in pidBps) {
+                if (pidBps[p] > 1000) hold[p] = 3
+                else if ((hold[p] || 0) > 0) hold[p]--
+                act[p] = (hold[p] || 0) > 0
+            }
+            // Decay PIDs not seen this tick
+            for (var hp in hold) {
+                if (!(hp in pidBps)) {
+                    hold[hp]--
+                    if (hold[hp] > 0) act[hp] = true
+                    else delete hold[hp]
+                }
+            }
+            root._pidHold = hold
+            root.pidActivity = act
 
             // Update Claude rate
             if (claudeHasPrev) _updateRate(claudeMaxBps, "_activeSince", "_idleTicks", "_peakBps", "instantRate")
@@ -702,7 +725,7 @@ PlasmoidItem {
                 Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                 visible: root.compactStyle === "tacho"
 
-                property real pct: root.instantRate
+                property real pct: Math.max(root.instantRate, root.gcliInstantRate, root.ocInstantRate)
                 readonly property real _startRad: 3 * Math.PI / 4
                 readonly property real _sweepRad: 3 * Math.PI / 2
                 readonly property color _color: pct > 0.8 ? Kirigami.Theme.negativeTextColor
@@ -794,6 +817,12 @@ PlasmoidItem {
                 Kirigami.Theme.inherit: false
 
                 QQC2.TabButton {
+                    text: "\u2728"
+                    icon.name: "view-statistics"
+                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
+                    Kirigami.Theme.inherit: false
+                }
+                QQC2.TabButton {
                     visible: root.enableClaude
                     text: "Claude"
                     icon.name: "preferences-system-performance"
@@ -826,7 +855,7 @@ PlasmoidItem {
 
             // Map visible tab index to service
             property var _tabMap: {
-                var m = []
+                var m = ["summary"]
                 if (root.enableClaude) m.push("claude")
                 if (root.enableGeminiCli) m.push("gcli")
                 if (root.enableAntigravity) m.push("ag")
@@ -841,6 +870,10 @@ PlasmoidItem {
                 Layout.fillHeight: true
                 currentIndex: tabBar.currentIndex
 
+                Loader {
+                    active: fullRepCol._activeTab === "summary"
+                    sourceComponent: Component { SummaryTab { appRoot: root } }
+                }
                 Loader {
                     visible: root.enableClaude
                     active: fullRepCol._activeTab === "claude"

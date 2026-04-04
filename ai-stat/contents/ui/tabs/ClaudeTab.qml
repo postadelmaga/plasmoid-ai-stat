@@ -212,6 +212,7 @@ Flickable {
                     required property var modelData
                     Layout.fillWidth: true
                     session: modelData
+                    activity: (modelData.pid && appRoot.pidActivity[String(modelData.pid)]) ? appRoot.instantRate : 0
                 }
             }
         }

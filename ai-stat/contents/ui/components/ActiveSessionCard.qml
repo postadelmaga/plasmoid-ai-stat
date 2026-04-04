@@ -9,13 +9,40 @@ Rectangle {
     id: card
 
     property var session: ({})
+    property real activity: 0   // 0-1, driven by instantRate
 
     visible: (session.tokens || 0) > 0
     implicitHeight: col.implicitHeight + Kirigami.Units.smallSpacing * 2
     radius: Kirigami.Units.cornerRadius
     color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.06)
     border.width: 1
-    border.color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.12)
+    border.color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b,
+                          0.12 + _glowAlpha * 0.5)
+
+    property real _glowAlpha: 0
+    Behavior on _glowAlpha { NumberAnimation { duration: 600; easing.type: Easing.InOutSine } }
+
+    // Pulse loop when active
+    SequentialAnimation {
+        id: pulseAnim
+        loops: Animation.Infinite
+        running: card.activity > 0.05
+        NumberAnimation { target: card; property: "_glowAlpha"; to: 1.0; duration: 800; easing.type: Easing.InOutSine }
+        NumberAnimation { target: card; property: "_glowAlpha"; to: 0.2; duration: 800; easing.type: Easing.InOutSine }
+        onRunningChanged: if (!running) card._glowAlpha = 0
+    }
+
+    // Subtle glow rectangle behind the card
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -1
+        radius: parent.radius + 1
+        z: -1
+        color: "transparent"
+        border.width: 2
+        border.color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b,
+                              card._glowAlpha * 0.4 * card.activity)
+    }
 
     ColumnLayout {
         id: col
