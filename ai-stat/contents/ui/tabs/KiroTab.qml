@@ -12,6 +12,11 @@ Flickable {
 
     required property var appRoot
 
+    function openInFileManager(path) {
+        if (!path || path.length === 0) return
+        Qt.openUrlExternally("file://" + encodeURI(path))
+    }
+
     contentWidth: width
     contentHeight: kiroCol.implicitHeight + Kirigami.Units.largeSpacing
     clip: true
@@ -202,7 +207,12 @@ Flickable {
                     }
                     
                     RowLayout {
+                        id: homeRow
                         Layout.fillWidth: true
+                        readonly property string homePath: {
+                            var p = appRoot.kiroHomeDir || ""
+                            return (typeof p === "string" && p.length > 0 && p.charAt(0) === "/") ? p : ""
+                        }
                         PlasmaComponents.Label {
                             text: i18n("Home")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
@@ -210,12 +220,85 @@ Flickable {
                             Layout.minimumWidth: Kirigami.Units.gridUnit * 5
                         }
                         PlasmaComponents.Label {
-                            text: "~/.kiro"
+                            text: homeRow.homePath.length > 0 ? homeRow.homePath : "~/.kiro"
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
                             font.family: "monospace"
+                            opacity: homePathMouse.containsMouse ? 0.9 : 0.5
+                            color: homePathMouse.containsMouse ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                            Layout.fillWidth: true
+                            elide: Text.ElideLeft
+                        }
+
+                        MouseArea {
+                            id: homePathMouse
+                            anchors.fill: parent
+                            enabled: homeRow.homePath.length > 0
+                            hoverEnabled: enabled
+                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: kiroTab.openInFileManager(homeRow.homePath)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Recent directories
+        ColumnLayout {
+            visible: appRoot.kiroRecentDirectories.length > 0
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
+
+            SectionHeader { text: i18n("Recent Directories (%1)", appRoot.kiroRecentDirectories.length) }
+
+            Repeater {
+                model: appRoot.kiroRecentDirectories
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: recentDirCol.implicitHeight + Kirigami.Units.smallSpacing * 2
+                    color: Kirigami.Theme.alternateBackgroundColor
+                    radius: 4
+                    border.width: recentDirMouse.containsMouse ? 1 : 0
+                    border.color: Kirigami.Theme.highlightColor
+
+                    ColumnLayout {
+                        id: recentDirCol
+                        anchors.fill: parent
+                        anchors.margins: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing / 3
+
+                        PlasmaComponents.Label {
+                            text: modelData.name || modelData.path || ""
+                            font.weight: Font.Bold
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+
+                        PlasmaComponents.Label {
+                            text: modelData.path || ""
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            font.family: "monospace"
+                            opacity: 0.65
+                            Layout.fillWidth: true
+                            elide: Text.ElideLeft
+                        }
+
+                        PlasmaComponents.Label {
+                            visible: !!modelData.updated_ts
+                            text: i18n("Updated %1", new Date(modelData.updated_ts).toLocaleString(Qt.locale(), Locale.ShortFormat))
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.92
                             opacity: 0.5
                             Layout.fillWidth: true
+                            elide: Text.ElideRight
                         }
+                    }
+
+                    MouseArea {
+                        id: recentDirMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: kiroTab.openInFileManager(modelData.path || "")
                     }
                 }
             }

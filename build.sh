@@ -8,7 +8,7 @@ rm -f "${PLASMOID_FILE}"
 (
     cd "${WIDGET_DIR}" || exit 1
     zip -r "../${PLASMOID_FILE}" . \
-        -x ".git/*" "__pycache__/*" "*.pyc"
+        -x ".git/*" "*/__pycache__/*" "*.pyc" "*.pyo" "*.backup" "*~"
 )
 
 if [ -f "${PLASMOID_FILE}" ]; then

@@ -9,12 +9,23 @@ Rectangle {
     id: sessionRow
 
     property var sessionData: ({})
+    readonly property string clickablePath: {
+        var p = sessionData.project || ""
+        return (typeof p === "string" && p.length > 0 && p.charAt(0) === "/") ? p : ""
+    }
+
+    function openSessionPath(path) {
+        if (!path || path.length === 0) return
+        Qt.openUrlExternally("file://" + encodeURI(path))
+    }
 
     implicitHeight: sessionCol.implicitHeight + Kirigami.Units.smallSpacing * 2
     radius: Kirigami.Units.cornerRadius
     color: Qt.rgba(Kirigami.Theme.textColor.r,
                    Kirigami.Theme.textColor.g,
                    Kirigami.Theme.textColor.b, 0.03)
+    border.width: sessionPathMouse.containsMouse ? 1 : 0
+    border.color: Kirigami.Theme.highlightColor
 
     ColumnLayout {
         id: sessionCol
@@ -111,5 +122,14 @@ Rectangle {
                 opacity: 0.3
             }
         }
+    }
+
+    MouseArea {
+        id: sessionPathMouse
+        anchors.fill: parent
+        enabled: sessionRow.clickablePath.length > 0
+        hoverEnabled: enabled
+        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: sessionRow.openSessionPath(sessionRow.clickablePath)
     }
 }

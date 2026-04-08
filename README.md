@@ -1,6 +1,6 @@
 # AI Stat
 
-Real-time KDE Plasma 6 widget for monitoring AI coding assistants — Claude Code, Gemini CLI, Antigravity IDE, and Gemini API. Token quotas, session throughput, cost tracking, and more.
+Real-time KDE Plasma 6 widget for monitoring local AI coding tools and API quotas in one place.
 
 <p align="center">
   <img src="screenshots/main.png" alt="AI Stat widget" width="420"/>
@@ -8,25 +8,26 @@ Real-time KDE Plasma 6 widget for monitoring AI coding assistants — Claude Cod
 
 ## Features
 
-- **Four Tabs** — Claude Code, Gemini CLI, Antigravity, Gemini API
-- **Live Tachometer** — car-style gauge with animated needle, engine vibration, and adaptive max scale (1s polling)
-- **Dual Quota Rings** — concentric input/output rings with glow effects and color thresholds
-- **Dashboard Layout** — Quota ring | Tachometer | Token ring side by side
-- **12h Hourly Chart** — smooth Catmull-Rom curves with adaptive bucket aggregation
-- **Daily History** — 8-day stacked bar chart (input/output)
-- **Active Sessions** — live session cards with token counts, duration, message count
-- **Model Breakdown** — per-model token usage with proportional bars
-- **Panel Indicator** — configurable: quota ring or mini tachometer
-- **Cost Tracking** — estimated API costs (weekly/total)
+- Multi-service tabs: **Claude Code**, **Gemini CLI**, **Copilot CLI**, **OpenCode**, **Kiro**, **Antigravity**, and optional **Gemini API**
+- Standardized top dashboard layout across CLI-style tabs (centered meter row)
+- Sticky popup pin and configurable popup height
+- 12-hour trend chart and 8-day history where data is available
+- Active sessions + recent sessions lists
+- Clickable local paths/directories (opens file manager via system URL handler)
+- Per-model/token breakdowns and quota/credit visualizations
+- Compact panel indicator with configurable target service/stat
 
-### Per-tool features
+## Service coverage
 
-| Tool | Data source | Tachometer | Quotas |
-|------|------------|------------|--------|
-| **Claude Code** | `~/.claude/` telemetry, sessions, history | `/proc/pid/io` polling | Session window + daily limits (auto-detected tier) |
-| **Gemini CLI** | `~/.gemini/` chat sessions | `/proc/pid/io` polling (child worker) | Requests/day (1000/1500/2000 by tier) |
-| **Antigravity** | Language server local API | `GetAllCascadeTrajectories` status polling | Prompt + Flow credits, per-model quota |
-| **Gemini API** | `countTokens` endpoint | — | Rate limits (requests + tokens) |
+| Service | Data source | Highlights |
+|---|---|---|
+| Claude Code | `~/.claude/` telemetry/sessions/history | Session-window quotas, live throughput, token/cost charts |
+| Gemini CLI | `~/.gemini/` chats/settings | Request quota, token trends, active-session process polling |
+| Copilot CLI | `~/.copilot/session-store.db` | Turns/sessions totals, 12h + daily charts |
+| OpenCode | `~/.local/share/opencode/opencode.db` | Token usage, sessions, models, throughput |
+| Kiro | `~/.kiro/` + `~/.config/Kiro/User/workspaceStorage` | Installed powers, extensions, running status, credit meter, recent workspace directories |
+| Antigravity | Local language server API | Credits, model/session activity, token trends |
+| Gemini API | `countTokens` endpoint | Request/token remaining limits per model |
 
 <p align="center">
   <img src="screenshots/dashboard.png" alt="Dashboard with tachometer and quota rings" width="380"/>
@@ -39,7 +40,7 @@ bash build.sh
 kpackagetool6 -t Plasma/Applet -i ai-stat.plasmoid
 ```
 
-### Upgrade
+## Upgrade
 
 ```bash
 bash build.sh
@@ -48,41 +49,51 @@ kpackagetool6 -t Plasma/Applet -u ai-stat.plasmoid
 
 ## Configuration
 
-Right-click the widget and select **Configure...** to set:
+Right-click the widget and select **Configure...**.
 
 | Setting | Description |
-|---------|-------------|
-| Refresh interval | How often to poll data (60-900s) |
-| Panel indicator | Quota ring or Tachometer in panel mode |
-| Show costs | Toggle estimated cost display |
-| Monthly budget | Budget threshold for cost tracking |
-| Daily input/output limits | Override auto-detected Claude tier limits (0 = auto) |
-| Gemini API key | Enable the Gemini API tab (get yours at [ai.google.dev](https://ai.google.dev)) |
+|---|---|
+| Service toggles | Enable/disable individual tabs |
+| Refresh interval | Data polling interval (60-900s) |
+| Popup height | Vertical size of popup content area |
+| Pin popup open | Keep popup sticky until unpinned |
+| Panel indicator | Quota ring or tachometer in compact mode |
+| Compact service/stat | Which service/stat compact mode displays |
+| Show costs / Monthly budget | Cost display and budget threshold |
+| Claude daily limits | Optional manual token-limit override (`0 = auto`) |
+| Gemini API key | Enables Gemini API limits tab |
 
-Claude tier limits are auto-detected from `~/.claude/.credentials.json`. Supported tiers: Pro, Max, Max 5x, Team.
-Gemini CLI tier is detected from `~/.gemini/settings.json` auth type.
-Antigravity connects automatically when the IDE is running (discovers the local language server).
+### Default settings template
 
-## How It Works
+Default config values are defined in:
+
+- `ai-stat/contents/config/main.xml` (kcfg defaults)
+- `ai-stat/contents/ui/configGeneral.qml` (config UI bindings)
+
+## Architecture
 
 ```
-local_stats.py        ──> JSON ──> main.qml (Claude tab)
-gemini_local_stats.py ──> JSON ──> main.qml (Gemini CLI tab)
-antigravity_stats.py  ──> JSON ──> main.qml (Antigravity tab)
-gemini_stats.py       ──> JSON ──> main.qml (Gemini API tab)
-/proc/pid/io          ──> grep ──> main.qml (Claude/Gemini CLI tachometers)
-curl localhost:PORT   ──> JSON ──> main.qml (Antigravity tachometer)
+local_stats.py         -> Claude Code tab data
+gemini_local_stats.py  -> Gemini CLI tab data
+copilot_stats.py       -> Copilot CLI tab data
+opencode_stats.py      -> OpenCode tab data
+kiro_stats.py          -> Kiro tab data
+antigravity_stats.py   -> Antigravity tab data
+gemini_stats.py        -> Gemini API limits
+/proc/pid/io polling   -> live throughput tachometers
 ```
 
-- **Backend**: Python scripts parse local data files and query local APIs, output JSON
-- **Realtime**: `/proc/pid/io` polling for Claude/Gemini CLI; language server API polling for Antigravity
-- **Rendering**: Split Canvas layers (static background / dynamic arcs) + GPU-composited needle rotation for minimal CPU impact
+## Build and packaging notes
+
+- `build.sh` packages `metadata.json` + `contents/` at archive root (required by `kpackagetool6`).
+- Build excludes temporary files (`__pycache__`, `*.pyc`, `*.backup`, editor backups).
+- If installed via a symlinked development path, source edits are live; package rebuild is only needed for distributable zip/install workflows.
 
 ## Requirements
 
 - KDE Plasma 6
 - Python 3
-- One or more of: Claude Code, Gemini CLI, Antigravity IDE
+- One or more supported tool installations/accounts for the tabs you enable
 
 ## Credits
 

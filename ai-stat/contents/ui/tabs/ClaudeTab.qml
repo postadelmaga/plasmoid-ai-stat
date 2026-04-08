@@ -301,7 +301,7 @@ Flickable {
             Layout.margins: Kirigami.Units.smallSpacing
             ColumnLayout {
                 anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
-                SectionHeader { text: i18n("12h") }
+                SectionHeader { text: appRoot.claudeFineWindowMode === "last_active" ? i18n("12h (last active)") : i18n("12h") }
                 HourlyChart { Layout.fillWidth: true; Layout.fillHeight: true; rawData: appRoot.fineTokens; bucketMinutes: 5 }
             }
         }

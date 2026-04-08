@@ -29,11 +29,11 @@ PlasmoidItem {
     property bool pinPopupOpen: plasmoid.configuration.pinPopupOpen === true
     property bool enableClaude: plasmoid.configuration.enableClaude !== false
     property bool enableGeminiCli: plasmoid.configuration.enableGeminiCli !== false
-    property bool enableAntigravity: plasmoid.configuration.enableAntigravity !== false
+    property bool enableAntigravity: plasmoid.configuration.enableAntigravity === true
     property bool enableGeminiApi: plasmoid.configuration.enableGeminiApi === true
     property bool enableCopilot: plasmoid.configuration.enableCopilot !== false
     property bool enableKiro: plasmoid.configuration.enableKiro !== false
-    property bool enableOpenCode: plasmoid.configuration.enableOpenCode !== false
+    property bool enableOpenCode: plasmoid.configuration.enableOpenCode === true
 
     property bool onDesktop: Plasmoid.formFactor === 0
     preferredRepresentation: onDesktop ? fullRepresentation : compactRepresentation
@@ -75,6 +75,7 @@ PlasmoidItem {
     property double estCostTotal: 0
     property var dailyTokens: []
     property var fineTokens: []
+    property string claudeFineWindowMode: "live"
     // Throughput rates (tok/h, from local_stats.py)
     property real rateOutput5m: 0     // output only (Claude's generated text)
     property real rateOutput30m: 0
@@ -230,11 +231,13 @@ PlasmoidItem {
 
     // ── Kiro state ──
     property bool kiroLoading: false
+    property string kiroHomeDir: ""
     property string kiroVersion: ""
     property bool kiroRunning: false
     property int kiroPowersInstalled: 0
     property int kiroExtensions: 0
     property var kiroPowers: []
+    property var kiroRecentDirectories: []
     property int kiroCreditsUsed: 0
     property int kiroCreditsLimit: 1000
     property double kiroLastFetchedMs: 0
@@ -715,6 +718,16 @@ PlasmoidItem {
     }
 
     // ── Data functions ──
+    function shellQuote(value) {
+        return "'" + String(value).replace(/'/g, "'\"'\"'") + "'"
+    }
+
+    function pythonCommand(scriptPath, argString) {
+        var cmd = "/usr/bin/python3 " + shellQuote(scriptPath)
+        if (argString && String(argString).length > 0) cmd += " " + argString
+        return cmd
+    }
+
     function refreshAll() {
         if (enableClaude) {
             loading = true
@@ -722,43 +735,43 @@ PlasmoidItem {
             var limitArgs = ""
             if (dailyInputLimitM > 0) limitArgs += " --input-limit " + dailyInputLimitM
             if (dailyOutputLimitM > 0) limitArgs += " --output-limit " + dailyOutputLimitM
-            executable.connectSource("/usr/bin/python3 " + claudeScript + limitArgs)
+            executable.connectSource(pythonCommand(claudeScript, limitArgs))
         }
 
         if (enableGeminiApi && geminiApiKey) {
             geminiLoading = true
             var geminiScript = Qt.resolvedUrl("../code/gemini_stats.py").toString().replace("file://", "")
-            executable.connectSource("/usr/bin/python3 " + geminiScript + " " + geminiApiKey)
+            executable.connectSource(pythonCommand(geminiScript, shellQuote(geminiApiKey)))
         }
 
         if (enableGeminiCli) {
             gcliLoading = true
             var gcliScript = Qt.resolvedUrl("../code/gemini_local_stats.py").toString().replace("file://", "")
-            executable.connectSource("/usr/bin/python3 " + gcliScript)
+            executable.connectSource(pythonCommand(gcliScript))
         }
 
         if (enableAntigravity) {
             agLoading = true
             var agScript = Qt.resolvedUrl("../code/antigravity_stats.py").toString().replace("file://", "")
-            executable.connectSource("/usr/bin/python3 " + agScript)
+            executable.connectSource(pythonCommand(agScript))
         }
 
         if (enableOpenCode) {
             ocLoading = true
             var ocScript = Qt.resolvedUrl("../code/opencode_stats.py").toString().replace("file://", "")
-            executable.connectSource("/usr/bin/python3 " + ocScript)
+            executable.connectSource(pythonCommand(ocScript))
         }
 
         if (enableCopilot) {
             copilotLoading = true
             var copilotScript = Qt.resolvedUrl("../code/copilot_stats.py").toString().replace("file://", "")
-            executable.connectSource("/usr/bin/python3 " + copilotScript)
+            executable.connectSource(pythonCommand(copilotScript))
         }
 
         if (enableKiro) {
             kiroLoading = true
             var kiroScript = Qt.resolvedUrl("../code/kiro_stats.py").toString().replace("file://", "")
-            executable.connectSource("/usr/bin/python3 " + kiroScript)
+            executable.connectSource(pythonCommand(kiroScript))
         }
     }
 
@@ -772,8 +785,12 @@ PlasmoidItem {
         promptsMonth = s.prompts.month || 0
         if (s.limits) {
             hasLimits = true
-            limInTokPerDay = s.limits.input_tokens_per_day || 0
-            limOutTokPerDay = s.limits.output_tokens_per_day || 0
+            limInTokPerDay = s.limits.input_tokens_per_day || s.limits.daily_input || 0
+            limOutTokPerDay = s.limits.output_tokens_per_day || s.limits.daily_output || 0
+        } else {
+            hasLimits = false
+            limInTokPerDay = 0
+            limOutTokPerDay = 0
         }
         tokInToday = (s.tokens.today.input || 0) + (s.tokens.today.cache_read || 0) + (s.tokens.today.cache_create || 0)
         tokOutToday = s.tokens.today.output || 0
@@ -787,6 +804,7 @@ PlasmoidItem {
         estCostTotal = s.est_cost.total || 0
         dailyTokens = s.daily_tokens || []
         fineTokens = s.fine_tokens || []
+        claudeFineWindowMode = s.fine_window_mode || "live"
         if (s.throughput) {
             rateOutput5m = s.throughput.rate_output_5m || 0
             rateOutput30m = s.throughput.rate_output_30m || 0
@@ -983,11 +1001,13 @@ PlasmoidItem {
 
     function updateKiro(k) {
         kiroLastFetchedMs = Date.now()
+        kiroHomeDir = k.home_dir || ""
         kiroVersion = k.version || ""
         kiroRunning = k.is_running || false
         kiroPowersInstalled = k.powers_installed || 0
         kiroExtensions = k.extensions_count || 0
         kiroPowers = k.powers || []
+        kiroRecentDirectories = k.recent_directories || []
         kiroCreditsUsed = k.credits_used || 0
         kiroCreditsLimit = k.credits_limit || 1000
     }

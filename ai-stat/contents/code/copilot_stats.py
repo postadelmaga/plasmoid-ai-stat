@@ -190,6 +190,7 @@ if os.path.exists(db_path):
                 {
                     "id": (sid or "")[:8],
                     "project": short_project_label(cwd, repo),
+                    "cwd": cwd or "",
                     "model": host_type or branch or "",
                     "turns": int(turns or 0),
                     "duration_min": round(duration_min, 1),

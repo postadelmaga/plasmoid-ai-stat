@@ -156,8 +156,10 @@ except:
 
 daily_token_map = {}
 fine_token_map = {}
+fine_token_map_all = {}
 models_used = {}
 prompts = {"today": 0, "week": 0, "month": 0, "total": 0}
+last_token_ts_ms = 0
 
 HOURLY_WINDOW = 12
 hourly_cutoff_ts = (now_utc - timedelta(hours=HOURLY_WINDOW)).timestamp() * 1000
@@ -168,8 +170,11 @@ rate_cutoff_ts = now_ms - RATE_WINDOW_LONG
 recent_events = []  # [(ts_ms, inp, out, cr, cc)]
 
 def add_tokens_by_ts(ts_ms, inp, out, cr, cc):
-    global win_input, win_output
+    global win_input, win_output, last_token_ts_ms
     total_in = inp + cr + cc
+    if ts_ms > 0 and (total_in > 0 or out > 0):
+        if ts_ms > last_token_ts_ms:
+            last_token_ts_ms = ts_ms
     # Daily bucket (local time)
     try:
         dt = datetime.fromtimestamp(ts_ms / 1000)
@@ -178,10 +183,14 @@ def add_tokens_by_ts(ts_ms, inp, out, cr, cc):
             daily_token_map[day] = {"input": 0, "output": 0}
         daily_token_map[day]["input"] += total_in
         daily_token_map[day]["output"] += out
+        minute = (dt.minute // 5) * 5
+        fine_key = f"{day} {dt.hour:02d}:{minute:02d}"
+        if fine_key not in fine_token_map_all:
+            fine_token_map_all[fine_key] = {"input": 0, "output": 0}
+        fine_token_map_all[fine_key]["input"] += total_in
+        fine_token_map_all[fine_key]["output"] += out
         # 5-minute bucket (only for recent hours)
         if ts_ms >= hourly_cutoff_ts:
-            minute = (dt.minute // 5) * 5
-            fine_key = f"{day} {dt.hour:02d}:{minute:02d}"
             if fine_key not in fine_token_map:
                 fine_token_map[fine_key] = {"input": 0, "output": 0}
             fine_token_map[fine_key]["input"] += total_in
@@ -594,7 +603,13 @@ for i in range(7, -1, -1):
 # Fine-grained chart: pre-compute bucket keys in batch
 FINE_BUCKET_MIN = 5
 fine_tokens = []
+fine_window_mode = "live"
+source_fine_map = fine_token_map
 base_dt = now_local.replace(second=0, microsecond=0)
+if len(fine_token_map) == 0 and last_token_ts_ms > 0:
+    fine_window_mode = "last_active"
+    source_fine_map = fine_token_map_all
+    base_dt = datetime.fromtimestamp(last_token_ts_ms / 1000).replace(second=0, microsecond=0)
 base_minute = (base_dt.minute // FINE_BUCKET_MIN) * FINE_BUCKET_MIN
 base_dt = base_dt.replace(minute=base_minute)
 total_buckets = (HOURLY_WINDOW * 60) // FINE_BUCKET_MIN
@@ -602,7 +617,7 @@ for i in range(total_buckets - 1, -1, -1):
     dt_b = base_dt - timedelta(minutes=i * FINE_BUCKET_MIN)
     fine_key = f"{dt_b.strftime('%Y-%m-%d')} {dt_b.hour:02d}:{dt_b.minute:02d}"
     label = f"{dt_b.hour:02d}:{dt_b.minute:02d}"
-    entry = fine_token_map.get(fine_key, {"input": 0, "output": 0})
+    entry = source_fine_map.get(fine_key, {"input": 0, "output": 0})
     fine_tokens.append({"t": label, "input": entry["input"], "output": entry["output"]})
 
 # --- Throughput (per-type rates) ---
@@ -651,6 +666,8 @@ except:
 print(json.dumps({
     "subscription": {"type": sub_type, "tier": tier},
     "limits": {
+        "input_tokens_per_day": daily_in,
+        "output_tokens_per_day": daily_out,
         "daily_input": daily_in,
         "daily_output": daily_out,
         "weekly_input": daily_in * 7 if daily_in > 0 else 0,
@@ -671,6 +688,7 @@ print(json.dumps({
     },
     "daily_tokens": daily_tokens,
     "fine_tokens": fine_tokens,
+    "fine_window_mode": fine_window_mode,
     "throughput": {
         "rate_input_5m": round(rate_input_5m), "rate_input_30m": round(rate_input_30m),
         "rate_output_5m": round(rate_output_5m), "rate_output_30m": round(rate_output_30m),
