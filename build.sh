@@ -4,8 +4,12 @@ PLASMOID_FILE="ai-stat.plasmoid"
 
 echo "Creating ${PLASMOID_FILE}..."
 rm -f "${PLASMOID_FILE}"
-zip -r "${PLASMOID_FILE}" "${WIDGET_DIR}/" \
-    -x "${WIDGET_DIR}/.git/*"
+# Package contents and metadata at archive root (required by kpackagetool6).
+(
+    cd "${WIDGET_DIR}" || exit 1
+    zip -r "../${PLASMOID_FILE}" . \
+        -x ".git/*" "__pycache__/*" "*.pyc"
+)
 
 if [ -f "${PLASMOID_FILE}" ]; then
     echo "Created ${PLASMOID_FILE} successfully!"

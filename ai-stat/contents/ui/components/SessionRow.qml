@@ -29,7 +29,21 @@ Rectangle {
             Layout.fillWidth: true
 
             PlasmaComponents.Label {
-                text: Api.shortModel(sessionData.model || "")
+                text: {
+                    var model = sessionData.model || ""
+                    if (model) return Api.shortModel(model)
+                    // Fallback to project path if no model
+                    var project = sessionData.project || ""
+                    if (project) {
+                        // Show last 2 path components
+                        var parts = project.split("/")
+                        if (parts.length > 2) {
+                            return "…/" + parts.slice(-2).join("/")
+                        }
+                        return project
+                    }
+                    return sessionData.id || "Unknown"
+                }
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 font.weight: Font.DemiBold
                 Layout.fillWidth: true
@@ -55,7 +69,18 @@ Rectangle {
             spacing: Kirigami.Units.largeSpacing
 
             PlasmaComponents.Label {
-                text: Api.formatTokens(sessionData.tokens || 0) + " tokens"
+                text: {
+                    var parts = []
+                    var tokens = sessionData.tokens || 0
+                    if (tokens > 0) {
+                        parts.push(Api.formatTokens(tokens) + " tokens")
+                    }
+                    var prompts = sessionData.prompts || 0
+                    if (prompts > 0) {
+                        parts.push(prompts + " prompt" + (prompts > 1 ? "s" : ""))
+                    }
+                    return parts.length > 0 ? parts.join(" • ") : "0 tokens"
+                }
                 font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.95
                 opacity: 0.4
             }

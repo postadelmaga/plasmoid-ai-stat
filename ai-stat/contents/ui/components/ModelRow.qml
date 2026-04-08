@@ -42,9 +42,11 @@ ColumnLayout {
     }
 
     Rectangle {
+        id: barTrack
         Layout.fillWidth: true
         height: 6
         radius: 3
+        clip: true
         color: Qt.rgba(Kirigami.Theme.textColor.r,
                        Kirigami.Theme.textColor.g,
                        Kirigami.Theme.textColor.b, 0.06)
@@ -55,9 +57,12 @@ ColumnLayout {
             anchors.bottom: parent.bottom
 
             Rectangle {
-                width: modelRow.maxTokens > 0
-                       ? (modelRow.inputTokens / modelRow.maxTokens) * modelRow.parent.width
-                       : 0
+                id: inputBar
+                width: {
+                    if (modelRow.maxTokens <= 0) return 0
+                    var w = (modelRow.inputTokens / modelRow.maxTokens) * barTrack.width
+                    return Math.max(0, Math.min(barTrack.width, w))
+                }
                 height: parent.height
                 radius: 3
                 color: Kirigami.Theme.highlightColor
@@ -66,9 +71,12 @@ ColumnLayout {
             }
 
             Rectangle {
-                width: modelRow.maxTokens > 0
-                       ? (modelRow.outputTokens / modelRow.maxTokens) * modelRow.parent.width
-                       : 0
+                width: {
+                    if (modelRow.maxTokens <= 0) return 0
+                    var remaining = Math.max(0, barTrack.width - inputBar.width)
+                    var w = (modelRow.outputTokens / modelRow.maxTokens) * barTrack.width
+                    return Math.max(0, Math.min(remaining, w))
+                }
                 height: parent.height
                 radius: 3
                 color: Kirigami.Theme.positiveTextColor

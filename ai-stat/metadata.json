@@ -1,5 +1,7 @@
 {
     "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-MainScript": "ui/main.qml",
+    "X-Plasma-ConfigUI": "config/config.qml",
     "KPlugin": {
         "Id": "ai-stat",
         "Name": "AI Stat",
@@ -12,7 +14,7 @@
             }
         ],
         "Category": "System Information",
-        "Version": "1.1.0",
+        "Version": "1.3.2",
         "License": "GPL-3.0+"
     },
     "X-Plasma-API-Minimum-Version": "6.0"

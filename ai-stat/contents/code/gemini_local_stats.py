@@ -61,11 +61,13 @@ tok_all = {"input": 0, "output": 0, "cached": 0, "thoughts": 0, "tool": 0, "tota
 
 daily_token_map = {}
 fine_token_map = {}
+fine_token_map_all = {}
 models_used = {}
 prompts = {"today": 0, "week": 0, "month": 0, "total": 0}
 requests = {"today": 0, "week": 0, "month": 0, "total": 0}  # gemini responses = API requests
 session_count = 0
 recent_sessions = []
+last_token_ts_ms = 0
 
 FINE_BUCKET_MIN = 5
 
@@ -82,12 +84,16 @@ def _parse_iso_ts(ts_str):
 
 def add_tokens(ts_ms, tokens):
     """Add token counts to accumulators by timestamp."""
+    global last_token_ts_ms
     inp = tokens.get("input", 0)
     out = tokens.get("output", 0)
     cached = tokens.get("cached", 0)
     thoughts = tokens.get("thoughts", 0)
     tool = tokens.get("tool", 0)
     total = tokens.get("total", 0)
+    if ts_ms > 0 and total > 0:
+        if ts_ms > last_token_ts_ms:
+            last_token_ts_ms = ts_ms
 
     tok_all["input"] += inp; tok_all["output"] += out; tok_all["cached"] += cached
     tok_all["thoughts"] += thoughts; tok_all["tool"] += tool; tok_all["total"] += total
@@ -115,10 +121,14 @@ def add_tokens(ts_ms, tokens):
         daily_token_map[day]["input"] += inp + cached + thoughts + tool
         daily_token_map[day]["output"] += out
 
-        # Fine bucket (5-min)
+        # Fine bucket (5-min): keep both live-window and all-time maps.
+        minute = (dt.minute // FINE_BUCKET_MIN) * FINE_BUCKET_MIN
+        fine_key = f"{day} {dt.hour:02d}:{minute:02d}"
+        if fine_key not in fine_token_map_all:
+            fine_token_map_all[fine_key] = {"input": 0, "output": 0}
+        fine_token_map_all[fine_key]["input"] += inp + cached + thoughts + tool
+        fine_token_map_all[fine_key]["output"] += out
         if ts_ms >= hourly_cutoff_ts:
-            minute = (dt.minute // FINE_BUCKET_MIN) * FINE_BUCKET_MIN
-            fine_key = f"{day} {dt.hour:02d}:{minute:02d}"
             if fine_key not in fine_token_map:
                 fine_token_map[fine_key] = {"input": 0, "output": 0}
             fine_token_map[fine_key]["input"] += inp + cached + thoughts + tool
@@ -217,7 +227,13 @@ for i in range(7, -1, -1):
 
 # --- Build fine chart (12h) ---
 fine_tokens = []
+fine_window_mode = "live"
+source_fine_map = fine_token_map
 base_dt = now_local.replace(second=0, microsecond=0)
+if len(fine_token_map) == 0 and last_token_ts_ms > 0:
+    fine_window_mode = "last_active"
+    source_fine_map = fine_token_map_all
+    base_dt = datetime.fromtimestamp(last_token_ts_ms / 1000).replace(second=0, microsecond=0)
 base_minute = (base_dt.minute // FINE_BUCKET_MIN) * FINE_BUCKET_MIN
 base_dt = base_dt.replace(minute=base_minute)
 total_buckets = (HOURLY_WINDOW * 60) // FINE_BUCKET_MIN
@@ -225,7 +241,7 @@ for i in range(total_buckets - 1, -1, -1):
     dt_b = base_dt - timedelta(minutes=i * FINE_BUCKET_MIN)
     fine_key = f"{dt_b.strftime('%Y-%m-%d')} {dt_b.hour:02d}:{dt_b.minute:02d}"
     label = f"{dt_b.hour:02d}:{dt_b.minute:02d}"
-    entry = fine_token_map.get(fine_key, {"input": 0, "output": 0})
+    entry = source_fine_map.get(fine_key, {"input": 0, "output": 0})
     fine_tokens.append({"t": label, "input": entry["input"], "output": entry["output"]})
 
 # --- Active sessions (check for running gemini processes) ---
@@ -314,6 +330,7 @@ print(json.dumps({
     },
     "daily_tokens": daily_tokens,
     "fine_tokens": fine_tokens,
+    "fine_window_mode": fine_window_mode,
     "recent_sessions": recent_sessions[:8],
     "active_sessions": active_sessions,
     "models_used": models_used,
