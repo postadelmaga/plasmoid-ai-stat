@@ -82,8 +82,14 @@ if os.path.exists(db_path):
         c.execute("SELECT COUNT(*) FROM sessions WHERE created_at >= ?", (iso_utc(month_ago_utc),))
         result["sessions"]["month"] = c.fetchone()[0]
 
-        c.execute("SELECT COUNT(*) FROM sessions WHERE updated_at >= ?", (iso_utc(active_cutoff_utc),))
-        result["sessions"]["active"] = c.fetchone()[0]
+        active_sessions = 0
+        try:
+            c.execute("SELECT COUNT(DISTINCT session_id) FROM turns WHERE timestamp >= ?", (iso_utc(active_cutoff_utc),))
+            active_sessions = c.fetchone()[0] or 0
+        except sqlite3.Error:
+            c.execute("SELECT COUNT(*) FROM sessions WHERE updated_at >= ?", (iso_utc(active_cutoff_utc),))
+            active_sessions = c.fetchone()[0] or 0
+        result["sessions"]["active"] = active_sessions
 
         c.execute("SELECT COUNT(*) FROM turns")
         result["turns"]["total"] = c.fetchone()[0]

@@ -89,6 +89,30 @@ Flickable {
                 property real _scale: Math.min(1, Math.max(0.5, (width - Kirigami.Units.smallSpacing) / Math.max(_needed, 1)))
                 property real _ringSize: _targetRing * _scale
                 property real _tachoW: _targetTacho * _scale
+                readonly property real _todayInUsed: appRoot.gcliTokInToday > 0
+                                                     ? appRoot.gcliTokInToday
+                                                     : Math.max(0, appRoot.gcliTokInWeek > 0 ? appRoot.gcliTokInWeek / 7 : 0)
+                readonly property real _todayOutUsed: appRoot.gcliTokOutToday > 0
+                                                      ? appRoot.gcliTokOutToday
+                                                      : Math.max(0, appRoot.gcliTokOutWeek > 0 ? appRoot.gcliTokOutWeek / 7 : 0)
+                readonly property bool _usingTodayFallback: appRoot.gcliTokInToday <= 0 && appRoot.gcliTokOutToday <= 0
+                                                            && (appRoot.gcliTokInWeek > 0 || appRoot.gcliTokOutWeek > 0)
+                readonly property real _lastFineAllPerHour: {
+                    var series = appRoot.gcliFineTokens || []
+                    for (var i = series.length - 1; i >= 0; --i) {
+                        var total = (series[i].input || 0) + (series[i].output || 0)
+                        if (total > 0) return total * 12
+                    }
+                    return 0
+                }
+                readonly property real _lastFineOutPerHour: {
+                    var series = appRoot.gcliFineTokens || []
+                    for (var i = series.length - 1; i >= 0; --i) {
+                        var out = series[i].output || 0
+                        if (out > 0) return out * 12
+                    }
+                    return 0
+                }
 
                 Row {
                     id: gcliMetersRow
@@ -128,11 +152,21 @@ Flickable {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: gcliDashboardTop._tachoW
                             height: gcliDashboardTop._tachoW * 0.72
-                            value: appRoot.gcliInstantAllRate
-                            avgValue: appRoot.gcliRateAll30m
+                            value: {
+                                var v = appRoot.gcliInstantAllRate
+                                if (v <= 0) v = appRoot.gcliRateAll5m > 0 ? appRoot.gcliRateAll5m : appRoot.gcliRateAll30m
+                                if (v > 0) return v
+                                return gcliDashboardTop._lastFineAllPerHour
+                            }
+                            avgValue: appRoot.gcliRateAll30m > 0 ? appRoot.gcliRateAll30m : gcliDashboardTop._lastFineAllPerHour
                             maxValue: 300000000
                             label: i18n("tok/h")
-                            innerValue: appRoot.gcliInstantOutputRate
+                            innerValue: {
+                                var v = appRoot.gcliInstantOutputRate
+                                if (v <= 0) v = appRoot.gcliRateOutput5m > 0 ? appRoot.gcliRateOutput5m : appRoot.gcliRateOutput30m
+                                if (v > 0) return v
+                                return gcliDashboardTop._lastFineOutPerHour
+                            }
                             innerMaxValue: 500000
                         }
                         PlasmaComponents.Label {
@@ -151,18 +185,18 @@ Flickable {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: gcliDashboardTop._ringSize
                             height: gcliDashboardTop._ringSize
-                            outerUsed: appRoot.gcliTokInToday
+                            outerUsed: gcliDashboardTop._todayInUsed
                             outerLimit: Math.max(appRoot.gcliTokInWeek, appRoot.gcliTokInToday * 1.5, 1)
                             outerLabel: "in"
                             outerColor: Kirigami.Theme.highlightColor
-                            innerUsed: appRoot.gcliTokOutToday
+                            innerUsed: gcliDashboardTop._todayOutUsed
                             innerLimit: Math.max(appRoot.gcliTokOutWeek, appRoot.gcliTokOutToday * 1.5, 1)
                             innerLabel: "out"
                             innerColor: Kirigami.Theme.positiveTextColor
                         }
                         PlasmaComponents.Label {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: i18n("Today")
+                            text: gcliDashboardTop._usingTodayFallback ? i18n("Today (avg)") : i18n("Today")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
                             opacity: 0.35
                         }

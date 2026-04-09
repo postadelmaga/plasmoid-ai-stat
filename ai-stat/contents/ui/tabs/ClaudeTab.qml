@@ -98,12 +98,44 @@ Flickable {
                 readonly property real _sessionOutLimit: appRoot.sessionOutputLimit > 0
                                                         ? appRoot.sessionOutputLimit
                                                         : Math.max(appRoot.limOutTokPerDay > 0 ? appRoot.limOutTokPerDay / 5 : appRoot.tokOutToday * 1.25, 1)
+                readonly property real _sessionInUsed: appRoot.sessionInputUsed > 0
+                                                       ? appRoot.sessionInputUsed
+                                                       : Math.max(0, appRoot.tokInToday > 0 ? appRoot.tokInToday / 5 : (appRoot.tokInWeek > 0 ? appRoot.tokInWeek / 35 : 0))
+                readonly property real _sessionOutUsed: appRoot.sessionOutputUsed > 0
+                                                        ? appRoot.sessionOutputUsed
+                                                        : Math.max(0, appRoot.tokOutToday > 0 ? appRoot.tokOutToday / 5 : (appRoot.tokOutWeek > 0 ? appRoot.tokOutWeek / 35 : 0))
                 readonly property real _dailyInLimit: appRoot.limInTokPerDay > 0
                                                      ? appRoot.limInTokPerDay
                                                      : Math.max(appRoot.tokInToday * 1.25, appRoot.tokInWeek > 0 ? appRoot.tokInWeek / 7 : 0, 1)
                 readonly property real _dailyOutLimit: appRoot.limOutTokPerDay > 0
                                                       ? appRoot.limOutTokPerDay
                                                       : Math.max(appRoot.tokOutToday * 1.25, appRoot.tokOutWeek > 0 ? appRoot.tokOutWeek / 7 : 0, 1)
+                readonly property real _dailyInUsed: appRoot.tokInToday > 0
+                                                     ? appRoot.tokInToday
+                                                     : Math.max(0, appRoot.tokInWeek > 0 ? appRoot.tokInWeek / 7 : 0)
+                readonly property real _dailyOutUsed: appRoot.tokOutToday > 0
+                                                      ? appRoot.tokOutToday
+                                                      : Math.max(0, appRoot.tokOutWeek > 0 ? appRoot.tokOutWeek / 7 : 0)
+                readonly property bool _usingDailyFallback: appRoot.tokInToday <= 0 && appRoot.tokOutToday <= 0
+                                                            && (appRoot.tokInWeek > 0 || appRoot.tokOutWeek > 0)
+                readonly property bool _usingSessionFallback: appRoot.sessionInputUsed <= 0 && appRoot.sessionOutputUsed <= 0
+                                                              && (_sessionInUsed > 0 || _sessionOutUsed > 0)
+                readonly property real _lastFineAllPerHour: {
+                    var series = appRoot.fineTokens || []
+                    for (var i = series.length - 1; i >= 0; --i) {
+                        var total = (series[i].input || 0) + (series[i].output || 0)
+                        if (total > 0) return total * 12
+                    }
+                    return 0
+                }
+                readonly property real _lastFineOutPerHour: {
+                    var series = appRoot.fineTokens || []
+                    for (var i = series.length - 1; i >= 0; --i) {
+                        var out = series[i].output || 0
+                        if (out > 0) return out * 12
+                    }
+                    return 0
+                }
 
                 Row {
                     id: meterRow
@@ -117,14 +149,18 @@ Flickable {
                         DualQuotaRing {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: dashboardTop._ringSize; height: dashboardTop._ringSize
-                            outerUsed: appRoot.sessionInputUsed; outerLimit: dashboardTop._sessionInLimit; outerLabel: "in"
+                            outerUsed: dashboardTop._sessionInUsed; outerLimit: dashboardTop._sessionInLimit; outerLabel: "in"
                             outerColor: outerPct > 0.9 ? Kirigami.Theme.negativeTextColor : outerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
-                            innerUsed: appRoot.sessionOutputUsed; innerLimit: dashboardTop._sessionOutLimit; innerLabel: "out"
+                            innerUsed: dashboardTop._sessionOutUsed; innerLimit: dashboardTop._sessionOutLimit; innerLabel: "out"
                             innerColor: innerPct > 0.9 ? Kirigami.Theme.negativeTextColor : innerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor
                         }
                         PlasmaComponents.Label {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: i18n("Session %1/%2", appRoot.sessionNumber, appRoot.sessionTotal)
+                            text: {
+                                if (appRoot.sessionNumber > 0) return i18n("Session %1/%2", appRoot.sessionNumber, appRoot.sessionTotal)
+                                if (dashboardTop._usingSessionFallback) return i18n("Session (est.)")
+                                return i18n("Session")
+                            }
                             font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
                             opacity: 0.35
                         }
@@ -138,11 +174,21 @@ Flickable {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: dashboardTop._tachoW
                             height: dashboardTop._tachoW * 0.72
-                            value: appRoot.rateAll5m > 0 ? appRoot.rateAll5m : appRoot.rateAll30m
-                            avgValue: appRoot.rateAll30m
+                            value: {
+                                var v = appRoot.instantAllRate
+                                if (v <= 0) v = appRoot.rateAll5m > 0 ? appRoot.rateAll5m : appRoot.rateAll30m
+                                if (v > 0) return v
+                                return dashboardTop._lastFineAllPerHour
+                            }
+                            avgValue: appRoot.rateAll30m > 0 ? appRoot.rateAll30m : dashboardTop._lastFineAllPerHour
                             maxValue: 300000000
                             label: i18n("tok/h")
-                            innerValue: appRoot.rateOutput5m > 0 ? appRoot.rateOutput5m : appRoot.rateOutput30m
+                            innerValue: {
+                                var v = appRoot.instantOutputRate
+                                if (v <= 0) v = appRoot.rateOutput5m > 0 ? appRoot.rateOutput5m : appRoot.rateOutput30m
+                                if (v > 0) return v
+                                return dashboardTop._lastFineOutPerHour
+                            }
                             innerMaxValue: 500000
                             activityLevel: appRoot.instantRate
                         }
@@ -161,14 +207,14 @@ Flickable {
                         DualQuotaRing {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: dashboardTop._ringSize; height: dashboardTop._ringSize
-                            outerUsed: appRoot.tokInToday; outerLimit: dashboardTop._dailyInLimit; outerLabel: "in"
+                            outerUsed: dashboardTop._dailyInUsed; outerLimit: dashboardTop._dailyInLimit; outerLabel: "in"
                             outerColor: outerPct > 0.9 ? Kirigami.Theme.negativeTextColor : outerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
-                            innerUsed: appRoot.tokOutToday; innerLimit: dashboardTop._dailyOutLimit; innerLabel: "out"
+                            innerUsed: dashboardTop._dailyOutUsed; innerLimit: dashboardTop._dailyOutLimit; innerLabel: "out"
                             innerColor: innerPct > 0.9 ? Kirigami.Theme.negativeTextColor : innerPct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor
                         }
                         PlasmaComponents.Label {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: i18n("Daily")
+                            text: dashboardTop._usingDailyFallback ? i18n("Daily (avg)") : i18n("Daily")
                             font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
                             opacity: 0.35
                         }

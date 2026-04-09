@@ -12,7 +12,9 @@ Real-time KDE Plasma 6 widget for monitoring local AI coding tools and API quota
 - Standardized top dashboard layout across CLI-style tabs (centered meter row)
 - Sticky popup pin and configurable popup height
 - 12-hour trend chart and 8-day history where data is available
+- Meter fallbacks for low-activity periods (uses last active window/averages when current window is empty)
 - Active sessions + recent sessions lists
+- Copilot active-session counting based on recent turns for better accuracy
 - Clickable local paths/directories (opens file manager via system URL handler)
 - Per-model/token breakdowns and quota/credit visualizations
 - Compact panel indicator with configurable target service/stat
@@ -21,9 +23,9 @@ Real-time KDE Plasma 6 widget for monitoring local AI coding tools and API quota
 
 | Service | Data source | Highlights |
 |---|---|---|
-| Claude Code | `~/.claude/` telemetry/sessions/history | Session-window quotas, live throughput, token/cost charts |
-| Gemini CLI | `~/.gemini/` chats/settings | Request quota, token trends, active-session process polling |
-| Copilot CLI | `~/.copilot/session-store.db` | Turns/sessions totals, 12h + daily charts |
+| Claude Code | `~/.claude/` telemetry/sessions/history | Session-window quotas, live throughput, token/cost charts, last-active 12h fallback |
+| Gemini CLI | `~/.gemini/` chats/settings | Request quota, token trends, active-session process polling, last-active 12h fallback |
+| Copilot CLI | `~/.copilot/session-store.db` | Turns/sessions totals, active sessions from recent turns, 12h + daily charts |
 | OpenCode | `~/.local/share/opencode/opencode.db` | Token usage, sessions, models, throughput |
 | Kiro | `~/.kiro/` + `~/.config/Kiro/User/workspaceStorage` | Installed powers, extensions, running status, credit meter, recent workspace directories |
 | Antigravity | Local language server API | Credits, model/session activity, token trends |
