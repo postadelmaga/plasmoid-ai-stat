@@ -31,7 +31,7 @@ daily_cache_file = os.path.join(cache_dir, "daily_tokens.json")
 jsonl_cache_file = os.path.join(cache_dir, "jsonl_cache.json")
 
 TIER_LIMITS = {
-    "default_claude_max_5x": {"label": "Max 5x", "input_tokens_per_day": 1_500_000_000, "output_tokens_per_day": 150_000_000},
+    "default_claude_max_5x": {"label": "Max 5x", "input_tokens_per_day": 1_665_000_000, "output_tokens_per_day": 166_500_000},
     "default_claude_max":    {"label": "Max",    "input_tokens_per_day": 300_000_000, "output_tokens_per_day": 30_000_000},
     "default_claude_pro":    {"label": "Pro",    "input_tokens_per_day": 100_000_000, "output_tokens_per_day": 10_000_000},
     "default_claude_team":   {"label": "Team",   "input_tokens_per_day": 200_000_000, "output_tokens_per_day": 20_000_000},
