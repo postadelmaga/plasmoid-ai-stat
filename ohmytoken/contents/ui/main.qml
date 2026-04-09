@@ -288,8 +288,8 @@ PlasmoidItem {
         {id: "pi", name: "Pi", icon: "applications-science", iconSource: Qt.resolvedUrl("icons/pi.svg"), enabled: root.enablePi, complementary: true},
         {id: "oc", name: "OpenCode", icon: "utilities-terminal", enabled: root.enableOpenCode, complementary: true},
         {id: "gemini", name: "Gemini API", icon: "applications-science", enabled: root.enableGeminiApi, complementary: false},
-        {id: "copilot", name: "Copilot CLI", icon: "tools-wizard", enabled: root.enableCopilot, complementary: true},
-        {id: "kiro", name: "Kiro", icon: "kt-plugins", enabled: root.enableKiro, complementary: true}
+        {id: "copilot", name: "Copilot CLI", icon: "tools-wizard", iconSource: Qt.resolvedUrl("icons/copilot.svg"), enabled: root.enableCopilot, complementary: true},
+        {id: "kiro", name: "Kiro", icon: "kt-plugins", iconSource: Qt.resolvedUrl("icons/kiro.png"), enabled: root.enableKiro, complementary: true}
     ]
     
     // Rebuild enabled tabs whenever enable flags change
@@ -302,8 +302,8 @@ PlasmoidItem {
         if (enablePi) result.push({id: "pi", name: "Pi", icon: "applications-science", iconSource: Qt.resolvedUrl("icons/pi.svg"), complementary: true})
         if (enableOpenCode) result.push({id: "oc", name: "OpenCode", icon: "utilities-terminal", complementary: true})
         if (enableGeminiApi) result.push({id: "gemini", name: "Gemini API", icon: "applications-science", complementary: false})
-        if (enableCopilot) result.push({id: "copilot", name: "Copilot CLI", icon: "tools-wizard", complementary: true})
-        if (enableKiro) result.push({id: "kiro", name: "Kiro", icon: "kt-plugins", complementary: true})
+        if (enableCopilot) result.push({id: "copilot", name: "Copilot CLI", icon: "tools-wizard", iconSource: Qt.resolvedUrl("icons/copilot.svg"), complementary: true})
+        if (enableKiro) result.push({id: "kiro", name: "Kiro", icon: "kt-plugins", iconSource: Qt.resolvedUrl("icons/kiro.png"), complementary: true})
         return result
     }
 

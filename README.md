@@ -10,7 +10,7 @@ Real-time KDE Plasma 6 widget for monitoring AI coding tools in one dashboard: q
 
 | Tab | Source | Highlights |
 |---|---|---|
-| Summary | Aggregated from enabled providers | Total tokens, combined throughput, merged trend charts |
+| Summary | Aggregated from enabled providers | Total tokens, combined throughput, merged trend charts, provider rows for all active tabs (including Copilot CLI + Kiro) |
 | Claude Code | `~/.claude/` telemetry/sessions/history | Session-window quotas, token/cost trends, live activity |
 | Gemini CLI | `~/.gemini/` chats/settings | Request quota, token trends, active-session polling |
 | Pi | `~/.pi/agent/` sessions/settings | Token + cost tracking, prompts, model/provider breakdown |

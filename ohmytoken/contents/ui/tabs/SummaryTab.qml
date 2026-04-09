@@ -53,6 +53,8 @@ Flickable {
         if (appRoot.enableGeminiCli) n += appRoot.gcliActiveSessions
         if (appRoot.enableOpenCode) n += appRoot.ocActiveSessions
         if (appRoot.enablePi) n += appRoot.piActiveSessions
+        if (appRoot.enableCopilot) n += appRoot.copilotSessionsActive
+        if (appRoot.enableKiro && appRoot.kiroRunning) n += 1
         return n
     }
     readonly property real combinedRate: Math.max(appRoot.instantAllRate, appRoot.gcliInstantAllRate, appRoot.ocInstantAllRate, appRoot.agInstantAllRate, appRoot.piInstantAllRate)
@@ -193,6 +195,38 @@ Flickable {
                 accentColor: Kirigami.Theme.visitedLinkColor
                 totalToday: summaryTab.totalTokToday
             }
+
+            // Copilot CLI
+            ProviderRow {
+                visible: appRoot.enableCopilot
+                Layout.fillWidth: true
+                providerName: "Copilot CLI"
+                iconSource: Qt.resolvedUrl("../icons/copilot.svg")
+                tokToday: appRoot.copilotTurnsToday
+                tokWeek: appRoot.copilotTurnsWeek
+                activeSessions: appRoot.copilotSessionsActive
+                accentColor: Kirigami.Theme.highlightColor
+                totalToday: Math.max(summaryTab.totalTokToday, appRoot.copilotTurnsToday, 1)
+                useRawNumber: true
+                primarySuffix: " turns"
+                secondarySuffix: "w"
+            }
+
+            // Kiro
+            ProviderRow {
+                visible: appRoot.enableKiro
+                Layout.fillWidth: true
+                providerName: "Kiro"
+                iconSource: Qt.resolvedUrl("../icons/kiro.png")
+                tokToday: appRoot.kiroCreditsUsed
+                tokWeek: Math.max(appRoot.kiroCreditsLimit, 1)
+                activeSessions: appRoot.kiroRunning ? 1 : 0
+                accentColor: Kirigami.Theme.linkColor
+                totalToday: Math.max(summaryTab.totalTokToday, appRoot.kiroCreditsUsed, 1)
+                useRawNumber: true
+                primarySuffix: " used"
+                secondarySuffix: " lim"
+            }
         }
 
         // Combined 12h Chart (merge fine tokens from all providers)
@@ -262,6 +296,13 @@ Flickable {
         property int activeSessions: 0
         property color accentColor: Kirigami.Theme.highlightColor
         property double totalToday: 1
+        property bool useRawNumber: false
+        property string primarySuffix: ""
+        property string secondarySuffix: "w"
+
+        function _fmt(v) {
+            return useRawNumber ? Math.round(v).toString() : Api.formatTokens(v)
+        }
 
         implicitHeight: provRowLayout.implicitHeight + Kirigami.Units.smallSpacing * 2
         radius: Kirigami.Units.cornerRadius
@@ -306,14 +347,14 @@ Flickable {
             }
 
             PlasmaComponents.Label {
-                text: Api.formatTokens(provRow.tokToday)
+                text: provRow._fmt(provRow.tokToday) + provRow.primarySuffix
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
                 font.weight: Font.DemiBold
                 color: provRow.accentColor
             }
 
             PlasmaComponents.Label {
-                text: "/" + Api.formatTokens(provRow.tokWeek) + "w"
+                text: "/" + provRow._fmt(provRow.tokWeek) + provRow.secondarySuffix
                 font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.9
                 opacity: 0.4
             }
