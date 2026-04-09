@@ -58,5 +58,8 @@
         <entry name="enableKiro" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="enablePi" type="Bool">
+            <default>true</default>
+        </entry>
     </group>
 </kcfg>

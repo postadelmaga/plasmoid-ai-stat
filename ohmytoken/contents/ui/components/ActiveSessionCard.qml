@@ -9,9 +9,22 @@ Rectangle {
     id: card
 
     property var session: ({})
+    property real activity: 0   // 0-1, driven by pid activity/rate
     readonly property string clickablePath: {
         var p = session.cwd || ""
         return (typeof p === "string" && p.length > 0 && p.charAt(0) === "/") ? p : ""
+    }
+    property real _glowAlpha: 0
+
+    Behavior on _glowAlpha { NumberAnimation { duration: 600; easing.type: Easing.InOutSine } }
+
+    SequentialAnimation {
+        id: pulseAnim
+        loops: Animation.Infinite
+        running: card.activity > 0.05
+        NumberAnimation { target: card; property: "_glowAlpha"; to: 1.0; duration: 800; easing.type: Easing.InOutSine }
+        NumberAnimation { target: card; property: "_glowAlpha"; to: 0.2; duration: 800; easing.type: Easing.InOutSine }
+        onRunningChanged: if (!running) card._glowAlpha = 0
     }
 
     function openSessionPath(path) {
@@ -26,7 +39,18 @@ Rectangle {
     border.width: activePathMouse.containsMouse ? 2 : 1
     border.color: activePathMouse.containsMouse
                   ? Kirigami.Theme.highlightColor
-                  : Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.12)
+                  : Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.12 + _glowAlpha * 0.5)
+
+    Rectangle {
+        anchors.fill: parent
+        anchors.margins: -1
+        radius: parent.radius + 1
+        z: -1
+        color: "transparent"
+        border.width: 2
+        border.color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b,
+                              card._glowAlpha * 0.4 * card.activity)
+    }
 
     ColumnLayout {
         id: col

@@ -23,6 +23,7 @@ Item {
     property alias cfg_enableAntigravity: enableAntigravityCheck.checked
     property alias cfg_enableGeminiApi: enableGeminiApiCheck.checked
     property alias cfg_enableOpenCode: enableOpenCodeCheck.checked
+    property alias cfg_enablePi: enablePiCheck.checked
     property alias cfg_enableCopilot: enableCopilotCheck.checked
     property alias cfg_enableKiro: enableKiroCheck.checked
     property int cfg_refreshIntervalDefault: 300
@@ -41,6 +42,7 @@ Item {
     property bool cfg_enableAntigravityDefault: false
     property bool cfg_enableGeminiApiDefault: false
     property bool cfg_enableOpenCodeDefault: false
+    property bool cfg_enablePiDefault: true
     property bool cfg_enableCopilotDefault: true
     property bool cfg_enableKiroDefault: true
 
@@ -50,6 +52,7 @@ Item {
         if (enableGeminiCliCheck.checked) services.push({ value: "gcli", text: i18n("Gemini CLI") })
         if (enableAntigravityCheck.checked) services.push({ value: "ag", text: i18n("Antigravity") })
         if (enableOpenCodeCheck.checked) services.push({ value: "oc", text: i18n("OpenCode") })
+        if (enablePiCheck.checked) services.push({ value: "pi", text: i18n("Pi") })
         if (enableGeminiApiCheck.checked) services.push({ value: "gemini", text: i18n("Gemini API") })
         if (enableCopilotCheck.checked) services.push({ value: "copilot", text: i18n("Copilot CLI") })
         if (enableKiroCheck.checked) services.push({ value: "kiro", text: i18n("Kiro") })
@@ -103,6 +106,20 @@ Item {
         if (serviceId === "oc") return [
             { value: "activeSessions", text: i18n("Active sessions") },
             { value: "totalSessions", text: i18n("Total sessions") },
+            { value: "tokInToday", text: i18n("Input tokens today") },
+            { value: "tokOutToday", text: i18n("Output tokens today") },
+            { value: "tokInWeek", text: i18n("Input tokens week") },
+            { value: "tokOutWeek", text: i18n("Output tokens week") },
+            { value: "tokInMonth", text: i18n("Input tokens month") },
+            { value: "tokOutMonth", text: i18n("Output tokens month") },
+            { value: "instantRate", text: i18n("Live activity") }
+        ]
+        if (serviceId === "pi") return [
+            { value: "activeSessions", text: i18n("Active sessions") },
+            { value: "totalSessions", text: i18n("Total sessions") },
+            { value: "promptsToday", text: i18n("Prompts today") },
+            { value: "promptsWeek", text: i18n("Prompts week") },
+            { value: "promptsMonth", text: i18n("Prompts month") },
             { value: "tokInToday", text: i18n("Input tokens today") },
             { value: "tokOutToday", text: i18n("Output tokens today") },
             { value: "tokInWeek", text: i18n("Input tokens week") },
@@ -214,6 +231,12 @@ Item {
             id: enableOpenCodeCheck
             Kirigami.FormData.label: i18n("OpenCode:")
             text: i18n("Monitor ~/.local/share/opencode/ usage")
+        }
+
+        QQC2.CheckBox {
+            id: enablePiCheck
+            Kirigami.FormData.label: i18n("Pi:")
+            text: i18n("Monitor ~/.pi/agent/ usage")
         }
 
         QQC2.CheckBox {

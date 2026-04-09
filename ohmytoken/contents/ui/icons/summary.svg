@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Summary dashboard: four quadrant grid with spark -->
+  <rect fill="#A0A0C0" x="3" y="3" width="8" height="8" rx="2"/>
+  <rect fill="#C0C0E0" x="13" y="3" width="8" height="8" rx="2"/>
+  <rect fill="#C0C0E0" x="3" y="13" width="8" height="8" rx="2"/>
+  <rect fill="#A0A0C0" x="13" y="13" width="8" height="8" rx="2"/>
+  <circle fill="#E8E8FF" cx="17" cy="7" r="1.5" opacity="0.9"/>
+</svg>
