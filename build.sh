@@ -1,6 +1,6 @@
 #!/bin/bash
-WIDGET_DIR="ai-stat"
-PLASMOID_FILE="ai-stat.plasmoid"
+WIDGET_DIR="ohmytoken"
+PLASMOID_FILE="ohmytoken.plasmoid"
 
 echo "Creating ${PLASMOID_FILE}..."
 rm -f "${PLASMOID_FILE}"
@@ -16,7 +16,7 @@ if [ -f "${PLASMOID_FILE}" ]; then
     echo ""
     echo "Install with:  kpackagetool6 -t Plasma/Applet -i ${PLASMOID_FILE}"
     echo "Upgrade with:  kpackagetool6 -t Plasma/Applet -u ${PLASMOID_FILE}"
-    echo "Remove with:   kpackagetool6 -t Plasma/Applet -r ai-stat"
+    echo "Remove with:   kpackagetool6 -t Plasma/Applet -r ohmytoken"
 else
     echo "Error creating ${PLASMOID_FILE}"
     exit 1

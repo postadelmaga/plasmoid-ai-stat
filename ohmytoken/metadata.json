@@ -3,8 +3,8 @@
     "X-Plasma-MainScript": "ui/main.qml",
     "X-Plasma-ConfigUI": "config/config.qml",
     "KPlugin": {
-        "Id": "ai-stat",
-        "Name": "AI Stat",
+        "Id": "ohmytoken",
+        "Name": "OhMyToken",
         "Description": "Real-time AI coding assistant dashboard — Claude, Gemini CLI, token quotas and throughput",
         "Icon": "preferences-system-performance",
         "Authors": [
