@@ -87,6 +87,7 @@ Canvas {
         var baseline = pad.top + h
         var textColor = Kirigami.Theme.textColor
         var hlColor = Kirigami.Theme.highlightColor
+        var bgColor = Kirigami.Theme.backgroundColor
 
         function px(idx) { return pad.left + (idx / (n - 1)) * w }
         function py(valPct) { return baseline - (valPct / 100) * h }
@@ -115,30 +116,64 @@ Canvas {
         for (var s = 0; s < activeSeries.length; s++) {
             var line = activeSeries[s]
             var c = line.color
+            var glowAlpha = 0.16
+            var lineAlpha = 0.94
 
-            ctx.beginPath()
-            for (var i = 0; i < n; i++) {
-                var x = px(i)
-                var yv = py(line.values[i])
-                if (i === 0) ctx.moveTo(x, yv)
-                else ctx.lineTo(x, yv)
-            }
             ctx.save()
-            ctx.globalAlpha = 0.9
-            ctx.strokeStyle = c
-            ctx.lineWidth = 2.4
             ctx.lineJoin = "round"
             ctx.lineCap = "round"
+
+            // Glow pass (wide)
+            ctx.globalAlpha = glowAlpha * 0.4
+            ctx.beginPath()
+            for (var i = 0; i < n; i++) {
+                var gx = px(i)
+                var gy = py(line.values[i])
+                if (i === 0) ctx.moveTo(gx, gy)
+                else ctx.lineTo(gx, gy)
+            }
+            ctx.strokeStyle = c
+            ctx.lineWidth = 12
+            ctx.stroke()
+
+            // Glow pass (tight)
+            ctx.globalAlpha = glowAlpha * 0.7
+            ctx.beginPath()
+            for (var i2 = 0; i2 < n; i2++) {
+                var gx2 = px(i2)
+                var gy2 = py(line.values[i2])
+                if (i2 === 0) ctx.moveTo(gx2, gy2)
+                else ctx.lineTo(gx2, gy2)
+            }
+            ctx.strokeStyle = c
+            ctx.lineWidth = 6
+            ctx.stroke()
+
+            // Main line
+            ctx.globalAlpha = lineAlpha
+            ctx.beginPath()
+            for (var i3 = 0; i3 < n; i3++) {
+                var x = px(i3)
+                var yv = py(line.values[i3])
+                if (i3 === 0) ctx.moveTo(x, yv)
+                else ctx.lineTo(x, yv)
+            }
+            ctx.strokeStyle = c
+            ctx.lineWidth = 2.5
             ctx.stroke()
             ctx.restore()
 
             var lastX = px(n - 1)
             var lastY = py(line.values[n - 1])
-            ctx.beginPath()
-            ctx.arc(lastX, lastY, 3.4, 0, Math.PI * 2)
             ctx.save()
-            ctx.globalAlpha = 0.95
+            ctx.globalAlpha = lineAlpha
+            ctx.beginPath()
+            ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2)
             ctx.fillStyle = c
+            ctx.fill()
+            ctx.beginPath()
+            ctx.arc(lastX, lastY, 1.5, 0, Math.PI * 2)
+            ctx.fillStyle = bgColor
             ctx.fill()
             ctx.restore()
         }

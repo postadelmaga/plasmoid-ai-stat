@@ -80,20 +80,26 @@ Flickable {
         return isFinite(n) ? n : 0
     }
 
-    // Fixed provider palette for comparison charts (stable across periods/themes).
-    readonly property var comparisonColorByProvider: ({
-        claude: Qt.rgba(255 / 255, 138 / 255, 0 / 255, 1),
-        gcli: Qt.rgba(0 / 255, 163 / 255, 255 / 255, 1),
-        ag: Qt.rgba(156 / 255, 39 / 255, 176 / 255, 1),
-        oc: Qt.rgba(0 / 255, 184 / 255, 148 / 255, 1),
-        pi: Qt.rgba(255 / 255, 77 / 255, 109 / 255, 1),
-        copilot: Qt.rgba(83 / 255, 109 / 255, 254 / 255, 1),
-        kiro: Qt.rgba(255 / 255, 196 / 255, 0 / 255, 1)
-    })
+    // Dynamic comparison palette: assigned by current active-provider rank (most-used first).
+    readonly property var comparisonContrastPalette: [
+        Qt.rgba(228 / 255, 26 / 255, 28 / 255, 1),   // red
+        Qt.rgba(255 / 255, 214 / 255, 10 / 255, 1),  // yellow
+        Qt.rgba(55 / 255, 126 / 255, 184 / 255, 1),  // blue
+        Qt.rgba(152 / 255, 78 / 255, 163 / 255, 1),  // purple
+        Qt.rgba(77 / 255, 175 / 255, 74 / 255, 1),   // green
+        Qt.rgba(255 / 255, 127 / 255, 0 / 255, 1),   // orange
+        Qt.rgba(166 / 255, 86 / 255, 40 / 255, 1)    // brown
+    ]
 
     function _comparisonColor(providerId) {
-        var palette = comparisonColorByProvider || {}
-        return palette[providerId] || Kirigami.Theme.highlightColor
+        var rows = providerRows || []
+        var palette = comparisonContrastPalette || []
+        for (var i = 0; i < rows.length; i++) {
+            if ((rows[i] || {}).id !== providerId) continue
+            if (palette.length === 0) return Kirigami.Theme.highlightColor
+            return palette[i % palette.length]
+        }
+        return Kirigami.Theme.highlightColor
     }
 
     function _aggregateSeries(allSeries, labelKey) {
