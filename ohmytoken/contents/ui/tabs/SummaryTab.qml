@@ -60,6 +60,314 @@ Flickable {
     readonly property real combinedRate: Math.max(appRoot.instantAllRate, appRoot.gcliInstantAllRate, appRoot.ocInstantAllRate, appRoot.agInstantAllRate, appRoot.piInstantAllRate)
     readonly property real combinedOutputRate: Math.max(appRoot.instantOutputRate, appRoot.gcliInstantOutputRate, appRoot.ocInstantOutputRate, appRoot.agInstantOutputRate, appRoot.piInstantOutputRate)
     readonly property real combinedAvg: Math.max(appRoot.rateAll30m, appRoot.gcliRateAll30m, appRoot.ocRateAll30m, appRoot.agRateAll30m, appRoot.piRateAll30m)
+    readonly property var mergedFineTokens: _aggregateSeries([
+        appRoot.enableClaude ? appRoot.fineTokens : [],
+        appRoot.enableGeminiCli ? appRoot.gcliFineTokens : [],
+        appRoot.enableAntigravity ? appRoot.agFineTokens : [],
+        appRoot.enableOpenCode ? appRoot.ocFineTokens : [],
+        appRoot.enablePi ? appRoot.piFineTokens : []
+    ], "t")
+    readonly property var mergedDailyTokens: _aggregateSeries([
+        appRoot.enableClaude ? appRoot.dailyTokens : [],
+        appRoot.enableGeminiCli ? appRoot.gcliDailyTokens : [],
+        appRoot.enableAntigravity ? appRoot.agDailyTokens : [],
+        appRoot.enableOpenCode ? appRoot.ocDailyTokens : [],
+        appRoot.enablePi ? appRoot.piDailyTokens : []
+    ], "day")
+
+    function _num(v) {
+        var n = Number(v)
+        return isFinite(n) ? n : 0
+    }
+
+    // Fixed provider palette for comparison charts (stable across periods/themes).
+    readonly property var comparisonColorByProvider: ({
+        claude: "#EF6C00",
+        gcli: "#1E88E5",
+        ag: "#8E24AA",
+        oc: "#00897B",
+        pi: "#D81B60",
+        copilot: "#3949AB",
+        kiro: "#6D4C41"
+    })
+
+    function _comparisonColor(providerId) {
+        var palette = comparisonColorByProvider || {}
+        return palette[providerId] || Kirigami.Theme.highlightColor
+    }
+
+    function _aggregateSeries(allSeries, labelKey) {
+        var seriesList = allSeries || []
+        var sums = {}
+        var order = []
+        var seen = {}
+
+        var base = []
+        for (var i = 0; i < seriesList.length; i++) {
+            var src = seriesList[i] || []
+            if (src.length > base.length) base = src
+        }
+
+        for (var b = 0; b < base.length; b++) {
+            var baseLabel = (base[b] || {})[labelKey] || ""
+            if (!baseLabel || seen[baseLabel]) continue
+            seen[baseLabel] = true
+            order.push(baseLabel)
+        }
+
+        for (var s = 0; s < seriesList.length; s++) {
+            var rows = seriesList[s] || []
+            for (var r = 0; r < rows.length; r++) {
+                var row = rows[r] || {}
+                var label = row[labelKey] || ""
+                if (!label) continue
+                if (!seen[label]) {
+                    seen[label] = true
+                    order.push(label)
+                }
+                if (!sums[label]) sums[label] = { input: 0, output: 0 }
+                sums[label].input += _num(row.input)
+                sums[label].output += _num(row.output)
+            }
+        }
+
+        if (labelKey === "day") order.sort()
+
+        var out = []
+        for (var o = 0; o < order.length; o++) {
+            var key = order[o]
+            var v = sums[key] || { input: 0, output: 0 }
+            if (labelKey === "day")
+                out.push({ day: key, input: v.input, output: v.output })
+            else
+                out.push({ t: key, input: v.input, output: v.output })
+        }
+        return out
+    }
+
+    function _providerRowsRaw() {
+        var rows = []
+        if (appRoot.enableClaude) {
+            rows.push({
+                id: "claude",
+                providerName: "Claude",
+                iconSource: Qt.resolvedUrl("../icons/claude.svg"),
+                today: appRoot.tokInToday + appRoot.tokOutToday,
+                baseline: appRoot.tokInWeek + appRoot.tokOutWeek,
+                activeSessions: appRoot.activeSessions,
+                accentColor: Kirigami.Theme.highlightColor,
+                useRawNumber: false,
+                primarySuffix: "",
+                secondarySuffix: "w"
+            })
+        }
+        if (appRoot.enableGeminiCli) {
+            rows.push({
+                id: "gcli",
+                providerName: "Gemini CLI",
+                iconSource: Qt.resolvedUrl("../icons/gemini.png"),
+                today: appRoot.gcliTokInToday + appRoot.gcliTokOutToday,
+                baseline: appRoot.gcliTokInWeek + appRoot.gcliTokOutWeek,
+                activeSessions: appRoot.gcliActiveSessions,
+                accentColor: Kirigami.Theme.positiveTextColor,
+                useRawNumber: false,
+                primarySuffix: "",
+                secondarySuffix: "w"
+            })
+        }
+        if (appRoot.enableAntigravity) {
+            rows.push({
+                id: "ag",
+                providerName: "Antigravity",
+                iconSource: Qt.resolvedUrl("../icons/antigravity.png"),
+                today: appRoot.agTokInToday + appRoot.agTokOutToday,
+                baseline: appRoot.agTokInWeek + appRoot.agTokOutWeek,
+                activeSessions: 0,
+                accentColor: Kirigami.Theme.neutralTextColor,
+                useRawNumber: false,
+                primarySuffix: "",
+                secondarySuffix: "w"
+            })
+        }
+        if (appRoot.enableOpenCode) {
+            rows.push({
+                id: "oc",
+                providerName: "OpenCode",
+                iconSource: Qt.resolvedUrl("../icons/opencode.svg"),
+                today: appRoot.ocTokInToday + appRoot.ocTokOutToday,
+                baseline: appRoot.ocTokInWeek + appRoot.ocTokOutWeek,
+                activeSessions: appRoot.ocActiveSessions,
+                accentColor: Kirigami.Theme.linkColor,
+                useRawNumber: false,
+                primarySuffix: "",
+                secondarySuffix: "w"
+            })
+        }
+        if (appRoot.enablePi) {
+            rows.push({
+                id: "pi",
+                providerName: "Pi",
+                iconSource: Qt.resolvedUrl("../icons/pi.svg"),
+                today: appRoot.piTokInToday + appRoot.piTokOutToday,
+                baseline: appRoot.piTokInWeek + appRoot.piTokOutWeek,
+                activeSessions: appRoot.piActiveSessions,
+                accentColor: Kirigami.Theme.visitedLinkColor,
+                useRawNumber: false,
+                primarySuffix: "",
+                secondarySuffix: "w"
+            })
+        }
+        if (appRoot.enableCopilot) {
+            rows.push({
+                id: "copilot",
+                providerName: "Copilot CLI",
+                iconSource: Qt.resolvedUrl("../icons/copilot.svg"),
+                today: appRoot.copilotTurnsToday,
+                baseline: appRoot.copilotTurnsWeek,
+                activeSessions: appRoot.copilotSessionsActive,
+                accentColor: Kirigami.Theme.highlightColor,
+                useRawNumber: true,
+                primarySuffix: " turns",
+                secondarySuffix: "w"
+            })
+        }
+        if (appRoot.enableKiro) {
+            rows.push({
+                id: "kiro",
+                providerName: "Kiro",
+                iconSource: Qt.resolvedUrl("../icons/kiro.png"),
+                today: appRoot.kiroCreditsUsed,
+                baseline: appRoot.kiroCreditsLimit,
+                activeSessions: appRoot.kiroRunning ? 1 : 0,
+                accentColor: Kirigami.Theme.linkColor,
+                useRawNumber: true,
+                primarySuffix: " used",
+                secondarySuffix: " lim"
+            })
+        }
+        for (var i = 0; i < rows.length; i++) {
+            rows[i].today = _num(rows[i].today)
+            rows[i].baseline = Math.max(1, _num(rows[i].baseline))
+            rows[i].utilization = rows[i].today / rows[i].baseline
+        }
+        rows.sort(function(a, b) {
+            if (b.utilization !== a.utilization) return b.utilization - a.utilization
+            return b.today - a.today
+        })
+        return rows
+    }
+
+    readonly property var providerRows: _providerRowsRaw()
+    readonly property double maxProviderToday: {
+        var rows = providerRows || []
+        var maxVal = 1
+        for (var i = 0; i < rows.length; i++)
+            maxVal = Math.max(maxVal, _num(rows[i].today))
+        return maxVal
+    }
+
+    function _historyPoints(providerId, period) {
+        var raw = []
+        if (period === "fine") {
+            if (providerId === "claude") raw = appRoot.fineTokens || []
+            else if (providerId === "gcli") raw = appRoot.gcliFineTokens || []
+            else if (providerId === "ag") raw = appRoot.agFineTokens || []
+            else if (providerId === "oc") raw = appRoot.ocFineTokens || []
+            else if (providerId === "pi") raw = appRoot.piFineTokens || []
+            else if (providerId === "copilot") raw = appRoot.copilotFineTurns || []
+        } else {
+            if (providerId === "claude") raw = appRoot.dailyTokens || []
+            else if (providerId === "gcli") raw = appRoot.gcliDailyTokens || []
+            else if (providerId === "ag") raw = appRoot.agDailyTokens || []
+            else if (providerId === "oc") raw = appRoot.ocDailyTokens || []
+            else if (providerId === "pi") raw = appRoot.piDailyTokens || []
+            else if (providerId === "copilot") raw = appRoot.copilotDailyTurns || []
+        }
+
+        var out = []
+        for (var i = 0; i < raw.length; i++) {
+            var row = raw[i] || {}
+            var label = period === "fine" ? (row.t || "") : (row.day || "")
+            if (!label) continue
+            var value = providerId === "copilot" && period !== "fine"
+                      ? _num(row.turns)
+                      : _num(row.input) + _num(row.output)
+            out.push({ label: label, value: value })
+        }
+        return out
+    }
+
+    function _labelsForPeriod(period) {
+        var rows = providerRows || []
+        var base = []
+        for (var i = 0; i < rows.length; i++) {
+            var pts = _historyPoints(rows[i].id, period)
+            if (pts.length > base.length) base = pts
+        }
+
+        var labels = []
+        var seen = {}
+        for (var b = 0; b < base.length; b++) {
+            var baseLabel = base[b].label
+            if (!baseLabel || seen[baseLabel]) continue
+            seen[baseLabel] = true
+            labels.push(baseLabel)
+        }
+        for (var r = 0; r < rows.length; r++) {
+            var pts2 = _historyPoints(rows[r].id, period)
+            for (var p = 0; p < pts2.length; p++) {
+                var label = pts2[p].label
+                if (!label || seen[label]) continue
+                seen[label] = true
+                labels.push(label)
+            }
+        }
+        if (period === "daily") labels.sort()
+        return labels
+    }
+
+    function _comparisonSeries(period, labels) {
+        if (!labels || labels.length < 2) return []
+        var rows = providerRows || []
+        var out = []
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i]
+            var pts = _historyPoints(row.id, period)
+            if (!pts || pts.length === 0) continue
+
+            var byLabel = {}
+            for (var p = 0; p < pts.length; p++) {
+                var point = pts[p]
+                byLabel[point.label] = _num(byLabel[point.label]) + _num(point.value)
+            }
+
+            var values = []
+            var maxVal = 0
+            for (var j = 0; j < labels.length; j++) {
+                var v = _num(byLabel[labels[j]])
+                values.push(v)
+                if (v > maxVal) maxVal = v
+            }
+            if (maxVal <= 0) continue
+
+            var normalized = []
+            for (var n = 0; n < values.length; n++)
+                normalized.push((values[n] / maxVal) * 100)
+
+            out.push({
+                id: row.id,
+                name: row.providerName,
+                color: _comparisonColor(row.id),
+                values: normalized
+            })
+        }
+        return out
+    }
+
+    readonly property var comparisonFineLabels: _labelsForPeriod("fine")
+    readonly property var comparisonFineSeries: _comparisonSeries("fine", comparisonFineLabels)
+    readonly property var comparisonDailyLabels: _labelsForPeriod("daily")
+    readonly property var comparisonDailySeries: _comparisonSeries("daily", comparisonDailyLabels)
 
     ColumnLayout {
         id: summaryCol
@@ -131,149 +439,88 @@ Flickable {
             Layout.fillWidth: true; Layout.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
             SectionHeader { text: i18n("Providers") }
 
-            // Claude
-            ProviderRow {
-                visible: appRoot.enableClaude
-                Layout.fillWidth: true
-                providerName: "Claude"
-                iconSource: Qt.resolvedUrl("../icons/claude.svg")
-                tokToday: appRoot.tokInToday + appRoot.tokOutToday
-                tokWeek: appRoot.tokInWeek + appRoot.tokOutWeek
-                activeSessions: appRoot.activeSessions
-                accentColor: Kirigami.Theme.highlightColor
-                totalToday: summaryTab.totalTokToday
-            }
-
-            // Gemini CLI
-            ProviderRow {
-                visible: appRoot.enableGeminiCli
-                Layout.fillWidth: true
-                providerName: "Gemini CLI"
-                iconSource: Qt.resolvedUrl("../icons/gemini.png")
-                tokToday: appRoot.gcliTokInToday + appRoot.gcliTokOutToday
-                tokWeek: appRoot.gcliTokInWeek + appRoot.gcliTokOutWeek
-                activeSessions: appRoot.gcliActiveSessions
-                accentColor: Kirigami.Theme.positiveTextColor
-                totalToday: summaryTab.totalTokToday
-            }
-
-            // Antigravity
-            ProviderRow {
-                visible: appRoot.enableAntigravity
-                Layout.fillWidth: true
-                providerName: "Antigravity"
-                iconSource: Qt.resolvedUrl("../icons/antigravity.png")
-                tokToday: appRoot.agTokInToday + appRoot.agTokOutToday
-                tokWeek: appRoot.agTokInWeek + appRoot.agTokOutWeek
-                activeSessions: 0
-                accentColor: Kirigami.Theme.neutralTextColor
-                totalToday: summaryTab.totalTokToday
-            }
-
-            // OpenCode
-            ProviderRow {
-                visible: appRoot.enableOpenCode
-                Layout.fillWidth: true
-                providerName: "OpenCode"
-                iconSource: Qt.resolvedUrl("../icons/opencode.svg")
-                tokToday: appRoot.ocTokInToday + appRoot.ocTokOutToday
-                tokWeek: appRoot.ocTokInWeek + appRoot.ocTokOutWeek
-                activeSessions: appRoot.ocActiveSessions
-                accentColor: Kirigami.Theme.linkColor
-                totalToday: summaryTab.totalTokToday
-            }
-
-            // Pi
-            ProviderRow {
-                visible: appRoot.enablePi
-                Layout.fillWidth: true
-                providerName: "Pi"
-                iconSource: Qt.resolvedUrl("../icons/pi.svg")
-                tokToday: appRoot.piTokInToday + appRoot.piTokOutToday
-                tokWeek: appRoot.piTokInWeek + appRoot.piTokOutWeek
-                activeSessions: appRoot.piActiveSessions
-                accentColor: Kirigami.Theme.visitedLinkColor
-                totalToday: summaryTab.totalTokToday
-            }
-
-            // Copilot CLI
-            ProviderRow {
-                visible: appRoot.enableCopilot
-                Layout.fillWidth: true
-                providerName: "Copilot CLI"
-                iconSource: Qt.resolvedUrl("../icons/copilot.svg")
-                tokToday: appRoot.copilotTurnsToday
-                tokWeek: appRoot.copilotTurnsWeek
-                activeSessions: appRoot.copilotSessionsActive
-                accentColor: Kirigami.Theme.highlightColor
-                totalToday: Math.max(summaryTab.totalTokToday, appRoot.copilotTurnsToday, 1)
-                useRawNumber: true
-                primarySuffix: " turns"
-                secondarySuffix: "w"
-            }
-
-            // Kiro
-            ProviderRow {
-                visible: appRoot.enableKiro
-                Layout.fillWidth: true
-                providerName: "Kiro"
-                iconSource: Qt.resolvedUrl("../icons/kiro.png")
-                tokToday: appRoot.kiroCreditsUsed
-                tokWeek: Math.max(appRoot.kiroCreditsLimit, 1)
-                activeSessions: appRoot.kiroRunning ? 1 : 0
-                accentColor: Kirigami.Theme.linkColor
-                totalToday: Math.max(summaryTab.totalTokToday, appRoot.kiroCreditsUsed, 1)
-                useRawNumber: true
-                primarySuffix: " used"
-                secondarySuffix: " lim"
+            Repeater {
+                model: summaryTab.providerRows
+                delegate: ProviderRow {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    providerName: modelData.providerName
+                    iconSource: modelData.iconSource
+                    tokToday: modelData.today
+                    tokWeek: modelData.baseline
+                    activeSessions: modelData.activeSessions
+                    accentColor: modelData.accentColor
+                    totalToday: summaryTab.maxProviderToday
+                    useRawNumber: modelData.useRawNumber
+                    primarySuffix: modelData.primarySuffix
+                    secondarySuffix: modelData.secondarySuffix
+                }
             }
         }
 
-        // Combined 12h Chart (merge fine tokens from all providers)
+        // 12h Totals
         Item {
-            visible: _mergedFine.length > 0
+            visible: summaryTab.mergedFineTokens.length > 0
             Layout.fillWidth: true
             Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
             Layout.margins: Kirigami.Units.smallSpacing
 
-            property var _mergedFine: {
-                var all = []
-                if (appRoot.enableClaude) all = all.concat(appRoot.fineTokens)
-                if (appRoot.enableGeminiCli) all = all.concat(appRoot.gcliFineTokens)
-                if (appRoot.enableAntigravity) all = all.concat(appRoot.agFineTokens)
-                if (appRoot.enableOpenCode) all = all.concat(appRoot.ocFineTokens)
-                if (appRoot.enablePi) all = all.concat(appRoot.piFineTokens)
-                return all
-            }
-
             ColumnLayout {
                 anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
-                SectionHeader { text: i18n("12h") }
-                HourlyChart { Layout.fillWidth: true; Layout.fillHeight: true; rawData: parent.parent._mergedFine; bucketMinutes: 5 }
+                SectionHeader { text: i18n("12h Totals") }
+                HourlyChart { Layout.fillWidth: true; Layout.fillHeight: true; rawData: summaryTab.mergedFineTokens; bucketMinutes: 5 }
             }
         }
 
-        // Combined Daily Chart
+        // 12h Provider Comparison (normalized)
         Item {
-            visible: _mergedDaily.length > 0
+            visible: summaryTab.comparisonFineSeries.length > 1 && summaryTab.comparisonFineLabels.length > 1
             Layout.fillWidth: true
             Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
             Layout.margins: Kirigami.Units.smallSpacing
 
-            property var _mergedDaily: {
-                var all = []
-                if (appRoot.enableClaude) all = all.concat(appRoot.dailyTokens)
-                if (appRoot.enableGeminiCli) all = all.concat(appRoot.gcliDailyTokens)
-                if (appRoot.enableAntigravity) all = all.concat(appRoot.agDailyTokens)
-                if (appRoot.enableOpenCode) all = all.concat(appRoot.ocDailyTokens)
-                if (appRoot.enablePi) all = all.concat(appRoot.piDailyTokens)
-                return all
+            ColumnLayout {
+                anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
+                SectionHeader { text: i18n("12h Provider Comparison (%)") }
+                ProviderComparisonChart {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    xLabels: summaryTab.comparisonFineLabels
+                    series: summaryTab.comparisonFineSeries
+                }
             }
+        }
+
+        // Daily Totals
+        Item {
+            visible: summaryTab.mergedDailyTokens.length > 0
+            Layout.fillWidth: true
+            Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
+            Layout.margins: Kirigami.Units.smallSpacing
 
             ColumnLayout {
                 anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
-                SectionHeader { text: i18n("Daily History") }
-                DailyChart { Layout.fillWidth: true; Layout.fillHeight: true; chartData: parent.parent._mergedDaily }
+                SectionHeader { text: i18n("Daily Totals") }
+                DailyChart { Layout.fillWidth: true; Layout.fillHeight: true; chartData: summaryTab.mergedDailyTokens }
+            }
+        }
+
+        // Daily Provider Comparison (normalized)
+        Item {
+            visible: summaryTab.comparisonDailySeries.length > 1 && summaryTab.comparisonDailyLabels.length > 1
+            Layout.fillWidth: true
+            Layout.preferredHeight: appRoot.onDesktop ? Kirigami.Units.gridUnit * 8 : Kirigami.Units.gridUnit * 6
+            Layout.margins: Kirigami.Units.smallSpacing
+
+            ColumnLayout {
+                anchors.fill: parent; spacing: Kirigami.Units.smallSpacing
+                SectionHeader { text: i18n("Daily Provider Comparison (%)") }
+                ProviderComparisonChart {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    xLabels: summaryTab.comparisonDailyLabels
+                    series: summaryTab.comparisonDailySeries
+                }
             }
         }
 
