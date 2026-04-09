@@ -9,6 +9,22 @@ Canvas {
     property var xLabels: []  // ["HH:MM", ...] or ["YYYY-MM-DD", ...]
     property var series: []   // [{name: "Claude", color: color, values: [0..100, ...]}, ...]
 
+    function _seriesColor(value) {
+        if (value === undefined || value === null || value === "")
+            return Kirigami.Theme.highlightColor
+        if (typeof value === "string")
+            return value
+
+        var r = Number(value.r)
+        var g = Number(value.g)
+        var b = Number(value.b)
+        var a = Number(value.a)
+        if (!isFinite(r) || !isFinite(g) || !isFinite(b))
+            return Kirigami.Theme.highlightColor
+        if (!isFinite(a)) a = 1
+        return Qt.rgba(r, g, b, a)
+    }
+
     readonly property var activeSeries: {
         var labels = xLabels || []
         var count = labels.length
@@ -34,7 +50,7 @@ Canvas {
 
             out.push({
                 name: row.name || "",
-                color: row.color || Kirigami.Theme.highlightColor,
+                color: _seriesColor(row.color),
                 values: normalized
             })
         }
@@ -107,18 +123,24 @@ Canvas {
                 if (i === 0) ctx.moveTo(x, yv)
                 else ctx.lineTo(x, yv)
             }
-            ctx.strokeStyle = Qt.rgba(c.r, c.g, c.b, 0.9)
-            ctx.lineWidth = 2
+            ctx.save()
+            ctx.globalAlpha = 0.9
+            ctx.strokeStyle = c
+            ctx.lineWidth = 2.4
             ctx.lineJoin = "round"
             ctx.lineCap = "round"
             ctx.stroke()
+            ctx.restore()
 
             var lastX = px(n - 1)
             var lastY = py(line.values[n - 1])
             ctx.beginPath()
-            ctx.arc(lastX, lastY, 3, 0, Math.PI * 2)
-            ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.95)
+            ctx.arc(lastX, lastY, 3.4, 0, Math.PI * 2)
+            ctx.save()
+            ctx.globalAlpha = 0.95
+            ctx.fillStyle = c
             ctx.fill()
+            ctx.restore()
         }
 
         // X-axis labels

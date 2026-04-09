@@ -82,13 +82,13 @@ Flickable {
 
     // Fixed provider palette for comparison charts (stable across periods/themes).
     readonly property var comparisonColorByProvider: ({
-        claude: Qt.rgba(239 / 255, 108 / 255, 0 / 255, 1),
-        gcli: Qt.rgba(30 / 255, 136 / 255, 229 / 255, 1),
-        ag: Qt.rgba(142 / 255, 36 / 255, 170 / 255, 1),
-        oc: Qt.rgba(0 / 255, 137 / 255, 123 / 255, 1),
-        pi: Qt.rgba(216 / 255, 27 / 255, 96 / 255, 1),
-        copilot: Qt.rgba(57 / 255, 73 / 255, 171 / 255, 1),
-        kiro: Qt.rgba(109 / 255, 76 / 255, 65 / 255, 1)
+        claude: Qt.rgba(255 / 255, 138 / 255, 0 / 255, 1),
+        gcli: Qt.rgba(0 / 255, 163 / 255, 255 / 255, 1),
+        ag: Qt.rgba(156 / 255, 39 / 255, 176 / 255, 1),
+        oc: Qt.rgba(0 / 255, 184 / 255, 148 / 255, 1),
+        pi: Qt.rgba(255 / 255, 77 / 255, 109 / 255, 1),
+        copilot: Qt.rgba(83 / 255, 109 / 255, 254 / 255, 1),
+        kiro: Qt.rgba(255 / 255, 196 / 255, 0 / 255, 1)
     })
 
     function _comparisonColor(providerId) {
