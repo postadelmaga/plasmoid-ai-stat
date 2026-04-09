@@ -9,20 +9,15 @@ Rectangle {
     id: card
 
     property var session: ({})
-    property real activity: 0   // 0-1, driven by instantRate
-
-    visible: (session.tokens || 0) > 0
-    implicitHeight: col.implicitHeight + Kirigami.Units.smallSpacing * 2
-    radius: Kirigami.Units.cornerRadius
-    color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.06)
-    border.width: 1
-    border.color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b,
-                          0.12 + _glowAlpha * 0.5)
-
+    property real activity: 0   // 0-1, driven by pid activity/rate
+    readonly property string clickablePath: {
+        var p = session.cwd || ""
+        return (typeof p === "string" && p.length > 0 && p.charAt(0) === "/") ? p : ""
+    }
     property real _glowAlpha: 0
+
     Behavior on _glowAlpha { NumberAnimation { duration: 600; easing.type: Easing.InOutSine } }
 
-    // Pulse loop when active
     SequentialAnimation {
         id: pulseAnim
         loops: Animation.Infinite
@@ -32,7 +27,20 @@ Rectangle {
         onRunningChanged: if (!running) card._glowAlpha = 0
     }
 
-    // Subtle glow rectangle behind the card
+    function openSessionPath(path) {
+        if (!path || path.length === 0) return
+        Qt.openUrlExternally("file://" + encodeURI(path))
+    }
+
+    visible: (session.tokens || 0) > 0
+    implicitHeight: col.implicitHeight + Kirigami.Units.smallSpacing * 2
+    radius: Kirigami.Units.cornerRadius
+    color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.06)
+    border.width: activePathMouse.containsMouse ? 2 : 1
+    border.color: activePathMouse.containsMouse
+                  ? Kirigami.Theme.highlightColor
+                  : Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.12 + _glowAlpha * 0.5)
+
     Rectangle {
         anchors.fill: parent
         anchors.margins: -1
@@ -83,5 +91,14 @@ Rectangle {
                 font.pointSize: Kirigami.Theme.smallFont.pointSize * 1.05; opacity: 0.4
             }
         }
+    }
+
+    MouseArea {
+        id: activePathMouse
+        anchors.fill: parent
+        enabled: card.clickablePath.length > 0
+        hoverEnabled: enabled
+        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onClicked: card.openSessionPath(card.clickablePath)
     }
 }

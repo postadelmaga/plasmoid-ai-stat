@@ -37,9 +37,13 @@ plasmashell --replace &
 ```
 local_stats.py        ──→ JSON ──→ main.qml (updateClaude)
 gemini_local_stats.py ──→ JSON ──→ main.qml (updateGeminiCli)
+antigravity_stats.py  ──→ JSON ──→ main.qml (updateAntigravity)
+opencode_stats.py     ──→ JSON ──→ main.qml (updateOpenCode)
+copilot_stats.py      ──→ JSON ──→ main.qml (updateCopilot)
+kiro_stats.py         ──→ JSON ──→ main.qml (updateKiro)
 pi_stats.py           ──→ JSON ──→ main.qml (updatePi)
 gemini_stats.py       ──→ JSON ──→ main.qml (updateGemini)
-/proc/pid/io          ──→ grep ──→ main.qml (instantRate / gcliInstantRate / piInstantRate)
+/proc/pid/io          ──→ grep ──→ main.qml (instantRate / gcliInstantRate / piInstantRate / ocInstantRate)
 ```
 
 `main.qml` uses `Plasma5Support.DataSource` with engine `"executable"` to run the Python scripts on a timer (`refreshInterval`, default 300s). The scripts output JSON to stdout which gets parsed and mapped to QML properties.
@@ -64,13 +68,22 @@ gemini_stats.py       ──→ JSON ──→ main.qml (updateGemini)
   - `sessions/*/*.jsonl` → per-message token usage (input, output, cacheRead, cacheWrite) and costs
   - Detects active processes via `pgrep -x pi` (parent + child PIDs)
 
+- **`copilot_stats.py`** — Parses `~/.copilot/session-store.db`:
+  - Session and turn totals (today/week/month/total)
+  - Active sessions from recent turns for better accuracy
+  - Recent session list with cwd metadata
+
+- **`kiro_stats.py`** — Parses `~/.kiro/` and Kiro workspace storage:
+  - Version/running state, powers, extensions
+  - Credit usage and recent workspace directories
+
 - **`gemini_stats.py`** — Uses `countTokens` endpoint (free, no quota impact) to check API availability
 
 - **`formatters.js`** — Formatting helpers: `formatTokens()`, `formatCost()`, `formatDuration()`, `tierLabel()`, `shortModel()`
 
 ### UI Components (`contents/ui/`)
 
-- **`main.qml`** — Root `PlasmoidItem` with compact/full representations, tabs (Summary/Claude/Gemini CLI/Antigravity/Pi/OpenCode/Gemini API), all state properties, I/O polling
+- **`main.qml`** — Root `PlasmoidItem` with compact/full representations, tabs (Summary/Claude/Gemini CLI/Antigravity/Pi/OpenCode/Copilot CLI/Kiro/Gemini API), all state properties, I/O polling
 - **`ClaudeTab.qml`** — Claude dashboard with quota rings, tachometer, charts, sessions
 - **`GeminiCliTab.qml`** — Gemini CLI dashboard (mirrors Claude layout)
 - **`PiTab.qml`** — Pi dashboard with dual quota rings, tachometer, costs, charts, sessions

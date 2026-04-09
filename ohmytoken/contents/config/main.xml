@@ -7,6 +7,9 @@
         <entry name="refreshInterval" type="Int">
             <default>300</default>
         </entry>
+        <entry name="popupHeightUnits" type="Int">
+            <default>40</default>
+        </entry>
         <entry name="showCosts" type="Bool">
             <default>true</default>
         </entry>
@@ -25,6 +28,15 @@
         <entry name="compactStyle" type="String">
             <default>ring</default>
         </entry>
+        <entry name="compactTargetService" type="String">
+            <default>claude</default>
+        </entry>
+        <entry name="compactTargetStat" type="String">
+            <default>sessionInputPct</default>
+        </entry>
+        <entry name="pinPopupOpen" type="Bool">
+            <default>false</default>
+        </entry>
         <entry name="enableClaude" type="Bool">
             <default>true</default>
         </entry>
@@ -32,12 +44,18 @@
             <default>true</default>
         </entry>
         <entry name="enableAntigravity" type="Bool">
-            <default>true</default>
+            <default>false</default>
         </entry>
         <entry name="enableGeminiApi" type="Bool">
             <default>false</default>
         </entry>
         <entry name="enableOpenCode" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="enableCopilot" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="enableKiro" type="Bool">
             <default>true</default>
         </entry>
         <entry name="enablePi" type="Bool">

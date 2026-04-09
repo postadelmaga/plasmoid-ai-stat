@@ -75,7 +75,7 @@ Canvas {
             if (inpVals[i] > maxIn) maxIn = inpVals[i]
             if (outVals[i] > maxOut) maxOut = outVals[i]
         }
-        if (maxIn === 0 && maxOut === 0) return
+        var hasAnyData = !(maxIn === 0 && maxOut === 0)
 
         var scaleIn = maxIn > 0 ? maxIn * 1.15 : 1
         var scaleOut
@@ -209,8 +209,10 @@ Canvas {
             }
         }
 
-        drawSeries(inPts, inpVals, hlColor, 0.95, 0.35, 0.18)
-        drawSeries(outPts, outVals, posColor, 0.90, 0.25, 0.14)
+        if (hasAnyData) {
+            drawSeries(inPts, inpVals, hlColor, 0.95, 0.35, 0.18)
+            drawSeries(outPts, outVals, posColor, 0.90, 0.25, 0.14)
+        }
 
         // ── "Now" marker ──
         var lastX = px(n - 1)
@@ -259,7 +261,7 @@ Canvas {
         for (var pi = 1; pi < n; pi++)
             if (inpVals[pi] > inpVals[peakIdx]) peakIdx = pi
 
-        if (inpVals[peakIdx] > 0) {
+        if (hasAnyData && inpVals[peakIdx] > 0) {
             var pkx = inPts[peakIdx].x
             var pky = inPts[peakIdx].y
             var peakText = Api.formatTokens(inpVals[peakIdx])

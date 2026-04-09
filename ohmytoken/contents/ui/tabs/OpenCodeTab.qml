@@ -11,6 +11,12 @@ import "../components"
 Flickable {
     id: ocTab
     required property var appRoot
+
+    function openInFileManager(path) {
+        if (!path || path.length === 0) return
+        Qt.openUrlExternally("file://" + encodeURI(path))
+    }
+
     contentWidth: width
     contentHeight: ocCol.implicitHeight + Kirigami.Units.largeSpacing
     clip: true
@@ -177,10 +183,16 @@ Flickable {
                 model: appRoot.ocRecentSessions
                 Rectangle {
                     required property var modelData
+                    readonly property string rowPath: {
+                        var p = modelData.path || modelData.cwd || modelData.project || modelData.title || ""
+                        return (typeof p === "string" && p.length > 0 && p.charAt(0) === "/") ? p : ""
+                    }
                     Layout.fillWidth: true
                     implicitHeight: sessCol.implicitHeight + Kirigami.Units.smallSpacing * 2
                     radius: Kirigami.Units.cornerRadius
                     color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
+                    border.width: ocRecentMouse.containsMouse ? 1 : 0
+                    border.color: Kirigami.Theme.highlightColor
 
                     ColumnLayout {
                         id: sessCol
@@ -214,6 +226,15 @@ Flickable {
                             }
                             Item { Layout.fillWidth: true }
                         }
+                    }
+
+                    MouseArea {
+                        id: ocRecentMouse
+                        anchors.fill: parent
+                        enabled: parent.rowPath.length > 0
+                        hoverEnabled: enabled
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: ocTab.openInFileManager(parent.rowPath)
                     }
                 }
             }

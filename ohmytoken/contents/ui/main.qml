@@ -17,21 +17,41 @@ PlasmoidItem {
 
     // ── Configuration ──
     property int refreshInterval: plasmoid.configuration.refreshInterval || 300
+    property int popupHeightUnits: plasmoid.configuration.popupHeightUnits || 40
     property double monthlyBudget: plasmoid.configuration.monthlyBudget || 100
     property bool showCosts: plasmoid.configuration.showCosts !== false
     property int dailyInputLimitM: plasmoid.configuration.dailyInputLimitM || 0
     property int dailyOutputLimitM: plasmoid.configuration.dailyOutputLimitM || 0
     property string geminiApiKey: plasmoid.configuration.geminiApiKey || ""
     property string compactStyle: plasmoid.configuration.compactStyle || "ring"
+    property string compactTargetService: plasmoid.configuration.compactTargetService || "claude"
+    property string compactTargetStat: plasmoid.configuration.compactTargetStat || "sessionInputPct"
+    property bool pinPopupOpen: plasmoid.configuration.pinPopupOpen === true
     property bool enableClaude: plasmoid.configuration.enableClaude !== false
     property bool enableGeminiCli: plasmoid.configuration.enableGeminiCli !== false
-    property bool enableAntigravity: plasmoid.configuration.enableAntigravity !== false
+    property bool enableAntigravity: plasmoid.configuration.enableAntigravity === true
     property bool enableGeminiApi: plasmoid.configuration.enableGeminiApi === true
+    property bool enableCopilot: plasmoid.configuration.enableCopilot !== false
+    property bool enableKiro: plasmoid.configuration.enableKiro !== false
+    property bool enableOpenCode: plasmoid.configuration.enableOpenCode === true
+    property bool enablePi: plasmoid.configuration.enablePi !== false
 
     property bool onDesktop: Plasmoid.formFactor === 0
     preferredRepresentation: onDesktop ? fullRepresentation : compactRepresentation
 
     Plasmoid.backgroundHints: PlasmaCore.Types.StandardBackground | PlasmaCore.Types.ShadowBackground
+    hideOnWindowDeactivate: !pinPopupOpen
+
+    onExpandedChanged: {
+        if (pinPopupOpen && !onDesktop && !expanded) {
+            Qt.callLater(function() {
+                if (pinPopupOpen && !onDesktop && !expanded) expanded = true
+            })
+        }
+    }
+    onPinPopupOpenChanged: {
+        if (pinPopupOpen && !onDesktop && !expanded) expanded = true
+    }
 
     // ── Claude state ──
     property bool loading: false
@@ -56,6 +76,7 @@ PlasmoidItem {
     property double estCostTotal: 0
     property var dailyTokens: []
     property var fineTokens: []
+    property string claudeFineWindowMode: "live"
     // Throughput rates (tok/h, from local_stats.py)
     property real rateOutput5m: 0     // output only (Claude's generated text)
     property real rateOutput30m: 0
@@ -64,6 +85,7 @@ PlasmoidItem {
     property var recentSessions: []
     property var activeSessionsList: []
     property var modelsUsed: ({})
+    property double claudeLastFetchedMs: 0
 
     // ── Session window ──
     property int sessionNumber: 0
@@ -110,6 +132,8 @@ PlasmoidItem {
     property var gcliRecentSessions: []
     property var gcliActiveSessionsList: []
     property var gcliModelsUsed: ({})
+    property string gcliFineWindowMode: "live"
+    property double gcliLastFetchedMs: 0
 
     // ── Gemini CLI throughput & realtime ──
     property real gcliRateOutput5m: 0
@@ -146,6 +170,7 @@ PlasmoidItem {
     property var agModelsUsed: ({})
     property var agModels: []
     property int agPid: 0
+    property double agLastFetchedMs: 0
 
     // ── Antigravity throughput & realtime ──
     property real agRateAll5m: 0
@@ -174,6 +199,7 @@ PlasmoidItem {
     property var ocFineTokens: []
     property var ocRecentSessions: []
     property var ocModelsUsed: ({})
+    property double ocLastFetchedMs: 0
     property real ocRateOutput5m: 0
     property real ocRateOutput30m: 0
     property real ocRateAll5m: 0
@@ -186,8 +212,6 @@ PlasmoidItem {
     property real _ocPeakBps: 10000
     readonly property real ocInstantAllRate: ocInstantRate * (ocRateAll5m > 0 ? ocRateAll5m : ocRateAll30m)
     readonly property real ocInstantOutputRate: ocInstantRate * (ocRateOutput5m > 0 ? ocRateOutput5m : ocRateOutput30m)
-    property bool enableOpenCode: plasmoid.configuration.enableOpenCode !== false
-    property bool enablePi: plasmoid.configuration.enablePi !== false
 
     // ── Pi state ──
     property bool piLoading: false
@@ -224,6 +248,300 @@ PlasmoidItem {
     property real _piPeakBps: 10000
     readonly property real piInstantAllRate: piInstantRate * (piRateAll5m > 0 ? piRateAll5m : piRateAll30m)
     readonly property real piInstantOutputRate: piInstantRate * (piRateOutput5m > 0 ? piRateOutput5m : piRateOutput30m)
+
+    // ── GitHub Copilot CLI state ──
+    property bool copilotLoading: false
+    property string copilotUser: ""
+    property int copilotSessionsActive: 0
+    property int copilotSessionsToday: 0
+    property int copilotSessionsWeek: 0
+    property int copilotSessionsMonth: 0
+    property int copilotSessionsTotal: 0
+    property int copilotTurnsToday: 0
+    property int copilotTurnsWeek: 0
+    property int copilotTurnsMonth: 0
+    property int copilotTurnsTotal: 0
+    property var copilotDailyTurns: []
+    property var copilotFineTurns: []
+    property var copilotRecentSessions: []
+    property double copilotLastFetchedMs: 0
+
+    // ── Kiro state ──
+    property bool kiroLoading: false
+    property string kiroHomeDir: ""
+    property string kiroVersion: ""
+    property bool kiroRunning: false
+    property int kiroPowersInstalled: 0
+    property int kiroExtensions: 0
+    property var kiroPowers: []
+    property var kiroRecentDirectories: []
+    property int kiroCreditsUsed: 0
+    property int kiroCreditsLimit: 1000
+    property double kiroLastFetchedMs: 0
+
+    // ── Tab Configuration ──
+    property var tabsConfig: [
+        {id: "summary", name: "Summary", icon: "view-statistics", iconSource: Qt.resolvedUrl("icons/summary.svg"), enabled: true, complementary: true},
+        {id: "claude", name: "Claude Code", icon: "preferences-system-performance", enabled: root.enableClaude, complementary: true},
+        {id: "gcli", name: "Gemini CLI", icon: "akonadiconsole", enabled: root.enableGeminiCli, complementary: false},
+        {id: "ag", name: "Antigravity", icon: "code-context", enabled: root.enableAntigravity, complementary: false},
+        {id: "pi", name: "Pi", icon: "applications-science", iconSource: Qt.resolvedUrl("icons/pi.svg"), enabled: root.enablePi, complementary: true},
+        {id: "oc", name: "OpenCode", icon: "utilities-terminal", enabled: root.enableOpenCode, complementary: true},
+        {id: "gemini", name: "Gemini API", icon: "applications-science", enabled: root.enableGeminiApi, complementary: false},
+        {id: "copilot", name: "Copilot CLI", icon: "tools-wizard", iconSource: Qt.resolvedUrl("icons/copilot.svg"), enabled: root.enableCopilot, complementary: true},
+        {id: "kiro", name: "Kiro", icon: "kt-plugins", iconSource: Qt.resolvedUrl("icons/kiro.png"), enabled: root.enableKiro, complementary: true}
+    ]
+    
+    // Rebuild enabled tabs whenever enable flags change
+    property var enabledTabs: {
+        var result = []
+        result.push({id: "summary", name: "Summary", icon: "view-statistics", iconSource: Qt.resolvedUrl("icons/summary.svg"), complementary: true})
+        if (enableClaude) result.push({id: "claude", name: "Claude Code", icon: "preferences-system-performance", complementary: true})
+        if (enableGeminiCli) result.push({id: "gcli", name: "Gemini CLI", icon: "akonadiconsole", complementary: false})
+        if (enableAntigravity) result.push({id: "ag", name: "Antigravity", icon: "code-context", complementary: false})
+        if (enablePi) result.push({id: "pi", name: "Pi", icon: "applications-science", iconSource: Qt.resolvedUrl("icons/pi.svg"), complementary: true})
+        if (enableOpenCode) result.push({id: "oc", name: "OpenCode", icon: "utilities-terminal", complementary: true})
+        if (enableGeminiApi) result.push({id: "gemini", name: "Gemini API", icon: "applications-science", complementary: false})
+        if (enableCopilot) result.push({id: "copilot", name: "Copilot CLI", icon: "tools-wizard", iconSource: Qt.resolvedUrl("icons/copilot.svg"), complementary: true})
+        if (enableKiro) result.push({id: "kiro", name: "Kiro", icon: "kt-plugins", iconSource: Qt.resolvedUrl("icons/kiro.png"), complementary: true})
+        return result
+    }
+
+    function _isServiceEnabled(serviceId) {
+        if (serviceId === "summary") return true
+        if (serviceId === "claude") return enableClaude
+        if (serviceId === "gcli") return enableGeminiCli
+        if (serviceId === "ag") return enableAntigravity
+        if (serviceId === "pi") return enablePi
+        if (serviceId === "oc") return enableOpenCode
+        if (serviceId === "gemini") return enableGeminiApi
+        if (serviceId === "copilot") return enableCopilot
+        if (serviceId === "kiro") return enableKiro
+        return false
+    }
+
+    function _firstEnabledService() {
+        if (enableClaude) return "claude"
+        if (enableGeminiCli) return "gcli"
+        if (enableAntigravity) return "ag"
+        if (enablePi) return "pi"
+        if (enableOpenCode) return "oc"
+        if (enableGeminiApi) return "gemini"
+        if (enableCopilot) return "copilot"
+        if (enableKiro) return "kiro"
+        return "claude"
+    }
+
+    function _defaultStatFor(serviceId) {
+        if (serviceId === "claude") return "sessionInputPct"
+        if (serviceId === "gcli") return "reqUsedPct"
+        if (serviceId === "ag") return "promptCreditsPct"
+        if (serviceId === "pi") return "activeSessions"
+        if (serviceId === "oc") return "activeSessions"
+        if (serviceId === "gemini") return "reqRemaining"
+        if (serviceId === "copilot") return "turnsToday"
+        if (serviceId === "kiro") return "running"
+        return "sessionInputPct"
+    }
+
+    function _statListFor(serviceId) {
+        if (serviceId === "claude") return ["sessionInputPct", "sessionUsagePct", "activeSessions", "promptsToday", "promptsWeek", "promptsMonth", "tokInToday", "tokOutToday", "tokInWeek", "tokOutWeek", "tokInMonth", "tokOutMonth", "instantRate"]
+        if (serviceId === "gcli") return ["reqUsedPct", "reqToday", "reqRemaining", "activeSessions", "totalSessions", "promptsToday", "promptsWeek", "promptsMonth", "tokInToday", "tokOutToday", "tokInWeek", "tokOutWeek", "tokInMonth", "tokOutMonth", "instantRate"]
+        if (serviceId === "ag") return ["promptCreditsPct", "flowCreditsPct", "tokInToday", "tokOutToday", "tokInWeek", "tokOutWeek", "tokInMonth", "tokOutMonth", "instantRate"]
+        if (serviceId === "pi") return ["activeSessions", "totalSessions", "promptsToday", "promptsWeek", "promptsMonth", "tokInToday", "tokOutToday", "tokInWeek", "tokOutWeek", "tokInMonth", "tokOutMonth", "instantRate"]
+        if (serviceId === "oc") return ["activeSessions", "totalSessions", "tokInToday", "tokOutToday", "tokInWeek", "tokOutWeek", "tokInMonth", "tokOutMonth", "instantRate"]
+        if (serviceId === "gemini") return ["reqRemaining", "tokRemaining", "reqUsedPct", "tokUsedPct", "modelCount"]
+        if (serviceId === "copilot") return ["turnsToday", "turnsWeek", "turnsMonth", "turnsTotal", "sessionsActive", "sessionsToday", "sessionsWeek", "sessionsMonth", "sessionsTotal"]
+        if (serviceId === "kiro") return ["running", "powersInstalled", "extensions", "creditsUsed", "creditsPct"]
+        return []
+    }
+
+    function _clamp01(x) {
+        return Math.max(0, Math.min(1, x))
+    }
+
+    function _colorForPct(pct) {
+        if (pct >= 0) {
+            if (pct > 0.9) return Kirigami.Theme.negativeTextColor
+            if (pct > 0.7) return Kirigami.Theme.neutralTextColor
+            return Kirigami.Theme.positiveTextColor
+        }
+        return Kirigami.Theme.textColor
+    }
+
+    readonly property string compactServiceResolved: {
+        if (_isServiceEnabled(compactTargetService)) return compactTargetService
+        return _firstEnabledService()
+    }
+    readonly property string compactStatResolved: {
+        var stats = _statListFor(compactServiceResolved)
+        for (var i = 0; i < stats.length; i++) {
+            if (stats[i] === compactTargetStat) return compactTargetStat
+        }
+        return _defaultStatFor(compactServiceResolved)
+    }
+    readonly property var compactMetric: _resolveCompactMetric(compactServiceResolved, compactStatResolved)
+
+    function _resolveCompactMetric(serviceId, statId) {
+        var value = "N/A"
+        var pct = -1
+
+        if (serviceId === "claude") {
+            if (statId === "sessionInputPct") {
+                if (sessionInputLimit > 0) {
+                    pct = _clamp01(sessionInputUsed / sessionInputLimit)
+                    value = Math.round(pct * 100) + "%"
+                } else if (limInTokPerDay > 0) {
+                    // Fallback for setups where session window limits are unavailable.
+                    pct = _clamp01(tokInToday / limInTokPerDay)
+                    value = Math.round(pct * 100) + "%"
+                } else {
+                    pct = 0
+                    value = "0%"
+                }
+            } else if (statId === "sessionUsagePct") {
+                var sessionLimitTotal = sessionInputLimit + sessionOutputLimit
+                var sessionUsedTotal = sessionInputUsed + sessionOutputUsed
+                var dailyLimitTotal = limInTokPerDay + limOutTokPerDay
+                var dailyUsedTotal = tokInToday + tokOutToday
+
+                if (sessionLimitTotal > 0) {
+                    pct = _clamp01(sessionUsedTotal / sessionLimitTotal)
+                    value = Math.round(pct * 100) + "%"
+                } else if (sessionInputLimit > 0) {
+                    pct = _clamp01(sessionInputUsed / sessionInputLimit)
+                    value = Math.round(pct * 100) + "%"
+                } else if (sessionOutputLimit > 0) {
+                    pct = _clamp01(sessionOutputUsed / sessionOutputLimit)
+                    value = Math.round(pct * 100) + "%"
+                } else if (dailyLimitTotal > 0) {
+                    pct = _clamp01(dailyUsedTotal / dailyLimitTotal)
+                    value = Math.round(pct * 100) + "%"
+                } else if (limInTokPerDay > 0) {
+                    pct = _clamp01(tokInToday / limInTokPerDay)
+                    value = Math.round(pct * 100) + "%"
+                } else if (limOutTokPerDay > 0) {
+                    pct = _clamp01(tokOutToday / limOutTokPerDay)
+                    value = Math.round(pct * 100) + "%"
+                } else {
+                    pct = 0
+                    value = "0%"
+                }
+            } else if (statId === "activeSessions") value = activeSessions.toString()
+            else if (statId === "promptsToday") value = promptsToday.toString()
+            else if (statId === "promptsWeek") value = promptsWeek.toString()
+            else if (statId === "promptsMonth") value = promptsMonth.toString()
+            else if (statId === "tokInToday") value = Api.formatTokens(tokInToday)
+            else if (statId === "tokOutToday") value = Api.formatTokens(tokOutToday)
+            else if (statId === "tokInWeek") value = Api.formatTokens(tokInWeek)
+            else if (statId === "tokOutWeek") value = Api.formatTokens(tokOutWeek)
+            else if (statId === "tokInMonth") value = Api.formatTokens(tokInMonth)
+            else if (statId === "tokOutMonth") value = Api.formatTokens(tokOutMonth)
+            else if (statId === "instantRate") { pct = _clamp01(instantRate); value = Math.round(pct * 100) + "%" }
+        } else if (serviceId === "gcli") {
+            if (statId === "reqUsedPct") {
+                if (gcliReqLimit > 0) {
+                    pct = _clamp01(gcliReqToday / gcliReqLimit)
+                    value = Math.round(pct * 100) + "%"
+                }
+            } else if (statId === "reqToday") value = gcliReqToday.toString()
+            else if (statId === "reqRemaining") value = Math.max(0, gcliReqLimit - gcliReqToday).toString()
+            else if (statId === "activeSessions") value = gcliActiveSessions.toString()
+            else if (statId === "totalSessions") value = gcliTotalSessions.toString()
+            else if (statId === "promptsToday") value = gcliPromptsToday.toString()
+            else if (statId === "promptsWeek") value = gcliPromptsWeek.toString()
+            else if (statId === "promptsMonth") value = gcliPromptsMonth.toString()
+            else if (statId === "tokInToday") value = Api.formatTokens(gcliTokInToday)
+            else if (statId === "tokOutToday") value = Api.formatTokens(gcliTokOutToday)
+            else if (statId === "tokInWeek") value = Api.formatTokens(gcliTokInWeek)
+            else if (statId === "tokOutWeek") value = Api.formatTokens(gcliTokOutWeek)
+            else if (statId === "tokInMonth") value = Api.formatTokens(gcliTokInMonth)
+            else if (statId === "tokOutMonth") value = Api.formatTokens(gcliTokOutMonth)
+            else if (statId === "instantRate") { pct = _clamp01(gcliInstantRate); value = Math.round(pct * 100) + "%" }
+        } else if (serviceId === "ag") {
+            if (statId === "promptCreditsPct") {
+                if (agPromptCreditsMax > 0) {
+                    pct = _clamp01(agPromptCredits / agPromptCreditsMax)
+                    value = Math.round(pct * 100) + "%"
+                }
+            } else if (statId === "flowCreditsPct") {
+                if (agFlowCreditsMax > 0) {
+                    pct = _clamp01(agFlowCredits / agFlowCreditsMax)
+                    value = Math.round(pct * 100) + "%"
+                }
+            } else if (statId === "tokInToday") value = Api.formatTokens(agTokInToday)
+            else if (statId === "tokOutToday") value = Api.formatTokens(agTokOutToday)
+            else if (statId === "tokInWeek") value = Api.formatTokens(agTokInWeek)
+            else if (statId === "tokOutWeek") value = Api.formatTokens(agTokOutWeek)
+            else if (statId === "tokInMonth") value = Api.formatTokens(agTokInMonth)
+            else if (statId === "tokOutMonth") value = Api.formatTokens(agTokOutMonth)
+            else if (statId === "instantRate") { pct = _clamp01(agInstantRate); value = Math.round(pct * 100) + "%" }
+        } else if (serviceId === "oc") {
+            if (statId === "activeSessions") value = ocActiveSessions.toString()
+            else if (statId === "totalSessions") value = ocTotalSessions.toString()
+            else if (statId === "tokInToday") value = Api.formatTokens(ocTokInToday)
+            else if (statId === "tokOutToday") value = Api.formatTokens(ocTokOutToday)
+            else if (statId === "tokInWeek") value = Api.formatTokens(ocTokInWeek)
+            else if (statId === "tokOutWeek") value = Api.formatTokens(ocTokOutWeek)
+            else if (statId === "tokInMonth") value = Api.formatTokens(ocTokInMonth)
+            else if (statId === "tokOutMonth") value = Api.formatTokens(ocTokOutMonth)
+            else if (statId === "instantRate") { pct = _clamp01(ocInstantRate); value = Math.round(pct * 100) + "%" }
+        } else if (serviceId === "pi") {
+            if (statId === "activeSessions") value = piActiveSessions.toString()
+            else if (statId === "totalSessions") value = piTotalSessions.toString()
+            else if (statId === "promptsToday") value = piPromptsToday.toString()
+            else if (statId === "promptsWeek") value = piPromptsWeek.toString()
+            else if (statId === "promptsMonth") value = piPromptsMonth.toString()
+            else if (statId === "tokInToday") value = Api.formatTokens(piTokInToday)
+            else if (statId === "tokOutToday") value = Api.formatTokens(piTokOutToday)
+            else if (statId === "tokInWeek") value = Api.formatTokens(piTokInWeek)
+            else if (statId === "tokOutWeek") value = Api.formatTokens(piTokOutWeek)
+            else if (statId === "tokInMonth") value = Api.formatTokens(piTokInMonth)
+            else if (statId === "tokOutMonth") value = Api.formatTokens(piTokOutMonth)
+            else if (statId === "instantRate") { pct = _clamp01(piInstantRate); value = Math.round(pct * 100) + "%" }
+        } else if (serviceId === "gemini") {
+            if (statId === "reqRemaining") value = Math.round(geminiReqRemaining).toString()
+            else if (statId === "tokRemaining") value = Api.formatTokens(geminiTokRemaining)
+            else if (statId === "reqUsedPct") {
+                if (geminiReqLimit > 0) {
+                    pct = _clamp01((geminiReqLimit - geminiReqRemaining) / geminiReqLimit)
+                    value = Math.round(pct * 100) + "%"
+                }
+            } else if (statId === "tokUsedPct") {
+                if (geminiTokLimit > 0) {
+                    pct = _clamp01((geminiTokLimit - geminiTokRemaining) / geminiTokLimit)
+                    value = Math.round(pct * 100) + "%"
+                }
+            } else if (statId === "modelCount") value = geminiModels.length.toString()
+        } else if (serviceId === "copilot") {
+            if (statId === "turnsToday") value = copilotTurnsToday.toString()
+            else if (statId === "turnsWeek") value = copilotTurnsWeek.toString()
+            else if (statId === "turnsMonth") value = copilotTurnsMonth.toString()
+            else if (statId === "turnsTotal") value = copilotTurnsTotal.toString()
+            else if (statId === "sessionsActive") value = copilotSessionsActive.toString()
+            else if (statId === "sessionsToday") value = copilotSessionsToday.toString()
+            else if (statId === "sessionsWeek") value = copilotSessionsWeek.toString()
+            else if (statId === "sessionsMonth") value = copilotSessionsMonth.toString()
+            else if (statId === "sessionsTotal") value = copilotSessionsTotal.toString()
+        } else if (serviceId === "kiro") {
+            if (statId === "running") { pct = kiroRunning ? 1 : 0; value = kiroRunning ? i18n("Running") : i18n("Stopped") }
+            else if (statId === "powersInstalled") value = kiroPowersInstalled.toString()
+            else if (statId === "extensions") value = kiroExtensions.toString()
+            else if (statId === "creditsUsed") value = kiroCreditsUsed.toString()
+            else if (statId === "creditsPct") {
+                if (kiroCreditsLimit > 0) {
+                    pct = _clamp01(kiroCreditsUsed / kiroCreditsLimit)
+                    value = Math.round(pct * 100) + "%"
+                }
+            }
+        }
+
+        return {
+            text: value,
+            pct: pct,
+            color: _colorForPct(pct)
+        }
+    }
 
     Plasma5Support.DataSource {
         id: agPollSource
@@ -290,7 +608,7 @@ PlasmoidItem {
     }
 
     switchWidth: onDesktop ? 0 : Kirigami.Units.gridUnit * 30
-    switchHeight: onDesktop ? 0 : Kirigami.Units.gridUnit * 36
+    switchHeight: onDesktop ? 0 : Kirigami.Units.gridUnit * popupHeightUnits
 
     // ── Data sources ──
     Plasma5Support.DataSource {
@@ -299,15 +617,21 @@ PlasmoidItem {
         connectedSources: []
         onNewData: (source, data) => {
             var stdout = data.stdout.trim()
-            if (source.indexOf("pi_stats") >= 0) {
-                if (stdout) { try { updatePi(JSON.parse(stdout)) } catch(e) { console.log("Pi parse error:", e) } }
-                piLoading = false
-            } else if (source.indexOf("opencode_stats") >= 0) {
+            if (source.indexOf("opencode_stats") >= 0) {
                 if (stdout) { try { updateOpenCode(JSON.parse(stdout)) } catch(e) { console.log("OpenCode parse error:", e) } }
                 ocLoading = false
             } else if (source.indexOf("antigravity_stats") >= 0) {
                 if (stdout) { try { updateAntigravity(JSON.parse(stdout)) } catch(e) { console.log("Antigravity parse error:", e) } }
                 agLoading = false
+            } else if (source.indexOf("copilot_stats") >= 0) {
+                if (stdout) { try { updateCopilot(JSON.parse(stdout)) } catch(e) { console.log("Copilot parse error:", e) } }
+                copilotLoading = false
+            } else if (source.indexOf("kiro_stats") >= 0) {
+                if (stdout) { try { updateKiro(JSON.parse(stdout)) } catch(e) { console.log("Kiro parse error:", e) } }
+                kiroLoading = false
+            } else if (source.indexOf("pi_stats") >= 0) {
+                if (stdout) { try { updatePi(JSON.parse(stdout)) } catch(e) { console.log("Pi parse error:", e) } }
+                piLoading = false
             } else if (source.indexOf("gemini_local_stats") >= 0) {
                 if (stdout) { try { updateGeminiCli(JSON.parse(stdout)) } catch(e) { console.log("GeminiCLI parse error:", e) } }
                 gcliLoading = false
@@ -356,7 +680,7 @@ PlasmoidItem {
             var lines = stdout.split("\n")
             var claudeMaxBps = 0, gcliMaxBps = 0, ocMaxBps = 0
             var claudeHasPrev = false, gcliHasPrev = false, ocHasPrev = false
-            var pidBps = {}  // per-pid bps for activity tracking
+            var pidBps = {}
 
             // Build PID lookup sets
             var claudePidSet = {}
@@ -378,6 +702,7 @@ PlasmoidItem {
                 var isClaude = claudePidSet[pid] || false
                 var isGcli = gcliPidSet[pid] || false
                 var isOc = ocPidSet[pid] || false
+                if (!isClaude && !isGcli && !isOc) continue
                 var prevMap = isClaude ? root._prevRchar : (isGcli ? root._gcliPrevRchar : root._ocPrevRchar)
                 var prev = prevMap[pid] || 0
 
@@ -399,7 +724,6 @@ PlasmoidItem {
                 else if ((hold[p] || 0) > 0) hold[p]--
                 act[p] = (hold[p] || 0) > 0
             }
-            // Decay PIDs not seen this tick
             for (var hp in hold) {
                 if (!(hp in pidBps)) {
                     hold[hp]--
@@ -424,10 +748,10 @@ PlasmoidItem {
 
             // Update Pi rate
             var piPidSet = {}
-            for (var pi2 = 0; pi2 < root._piPids.length; pi2++) piPidSet[root._piPids[pi2]] = true
+            for (var pii = 0; pii < root._piPids.length; pii++) piPidSet[root._piPids[pii]] = true
             var piMaxBps = 0, piHasPrev = false
-            for (var pi3 = 0; pi3 < lines.length; pi3++) {
-                var pline = lines[pi3]
+            for (var pil = 0; pil < lines.length; pil++) {
+                var pline = lines[pil]
                 var pPidStart = pline.indexOf("/proc/") + 6
                 var pPidEnd = pline.indexOf("/io:")
                 if (pPidStart < 6 || pPidEnd < 0) continue
@@ -436,7 +760,11 @@ PlasmoidItem {
                 var pRchar = parseInt(pline.substring(pline.lastIndexOf(" ") + 1))
                 if (isNaN(pRchar)) continue
                 var pPrev = root._piPrevRchar[pPid] || 0
-                if (pPrev > 0) { var pBps = pRchar - pPrev; if (pBps > piMaxBps) piMaxBps = pBps; piHasPrev = true }
+                if (pPrev > 0) {
+                    var pBps = pRchar - pPrev
+                    if (pBps > piMaxBps) piMaxBps = pBps
+                    piHasPrev = true
+                }
                 root._piPrevRchar[pPid] = pRchar
             }
             if (piHasPrev) _updateRate(piMaxBps, "_piActiveSince", "_piIdleTicks", "_piPeakBps", "piInstantRate")
@@ -493,12 +821,22 @@ PlasmoidItem {
 
     // ── Timers ──
     Timer {
-        interval: (root.activeSessions > 0 || root.gcliActiveSessions > 0 || root.piActiveSessions > 0) ? 30000 : root.refreshInterval * 1000
+        interval: (root.activeSessions > 0 || root.gcliActiveSessions > 0) ? 30000 : root.refreshInterval * 1000
         running: true; repeat: true; triggeredOnStart: true
         onTriggered: refreshAll()
     }
 
     // ── Data functions ──
+    function shellQuote(value) {
+        return "'" + String(value).replace(/'/g, "'\"'\"'") + "'"
+    }
+
+    function pythonCommand(scriptPath, argString) {
+        var cmd = "/usr/bin/python3 " + shellQuote(scriptPath)
+        if (argString && String(argString).length > 0) cmd += " " + argString
+        return cmd
+    }
+
     function refreshAll() {
         if (enableClaude) {
             loading = true
@@ -506,41 +844,54 @@ PlasmoidItem {
             var limitArgs = ""
             if (dailyInputLimitM > 0) limitArgs += " --input-limit " + dailyInputLimitM
             if (dailyOutputLimitM > 0) limitArgs += " --output-limit " + dailyOutputLimitM
-            executable.connectSource("python3 " + claudeScript + limitArgs)
+            executable.connectSource(pythonCommand(claudeScript, limitArgs))
         }
 
         if (enableGeminiApi && geminiApiKey) {
             geminiLoading = true
             var geminiScript = Qt.resolvedUrl("../code/gemini_stats.py").toString().replace("file://", "")
-            executable.connectSource("python3 " + geminiScript + " " + geminiApiKey)
+            executable.connectSource(pythonCommand(geminiScript, shellQuote(geminiApiKey)))
         }
 
         if (enableGeminiCli) {
             gcliLoading = true
             var gcliScript = Qt.resolvedUrl("../code/gemini_local_stats.py").toString().replace("file://", "")
-            executable.connectSource("python3 " + gcliScript)
+            executable.connectSource(pythonCommand(gcliScript))
         }
 
         if (enableAntigravity) {
             agLoading = true
             var agScript = Qt.resolvedUrl("../code/antigravity_stats.py").toString().replace("file://", "")
-            executable.connectSource("python3 " + agScript)
+            executable.connectSource(pythonCommand(agScript))
         }
 
         if (enableOpenCode) {
             ocLoading = true
             var ocScript = Qt.resolvedUrl("../code/opencode_stats.py").toString().replace("file://", "")
-            executable.connectSource("python3 " + ocScript)
+            executable.connectSource(pythonCommand(ocScript))
         }
 
         if (enablePi) {
             piLoading = true
             var piScript = Qt.resolvedUrl("../code/pi_stats.py").toString().replace("file://", "")
-            executable.connectSource("python3 " + piScript)
+            executable.connectSource(pythonCommand(piScript))
+        }
+
+        if (enableCopilot) {
+            copilotLoading = true
+            var copilotScript = Qt.resolvedUrl("../code/copilot_stats.py").toString().replace("file://", "")
+            executable.connectSource(pythonCommand(copilotScript))
+        }
+
+        if (enableKiro) {
+            kiroLoading = true
+            var kiroScript = Qt.resolvedUrl("../code/kiro_stats.py").toString().replace("file://", "")
+            executable.connectSource(pythonCommand(kiroScript))
         }
     }
 
     function updateClaude(s) {
+        claudeLastFetchedMs = Date.now()
         subType = s.subscription.type || "unknown"
         tierName = Api.tierLabel(s.subscription.tier)
         activeSessions = s.sessions.active || 0
@@ -549,8 +900,12 @@ PlasmoidItem {
         promptsMonth = s.prompts.month || 0
         if (s.limits) {
             hasLimits = true
-            limInTokPerDay = s.limits.input_tokens_per_day || 0
-            limOutTokPerDay = s.limits.output_tokens_per_day || 0
+            limInTokPerDay = s.limits.input_tokens_per_day || s.limits.daily_input || 0
+            limOutTokPerDay = s.limits.output_tokens_per_day || s.limits.daily_output || 0
+        } else {
+            hasLimits = false
+            limInTokPerDay = 0
+            limOutTokPerDay = 0
         }
         tokInToday = (s.tokens.today.input || 0) + (s.tokens.today.cache_read || 0) + (s.tokens.today.cache_create || 0)
         tokOutToday = s.tokens.today.output || 0
@@ -564,6 +919,7 @@ PlasmoidItem {
         estCostTotal = s.est_cost.total || 0
         dailyTokens = s.daily_tokens || []
         fineTokens = s.fine_tokens || []
+        claudeFineWindowMode = s.fine_window_mode || "live"
         if (s.throughput) {
             rateOutput5m = s.throughput.rate_output_5m || 0
             rateOutput30m = s.throughput.rate_output_30m || 0
@@ -615,6 +971,7 @@ PlasmoidItem {
     }
 
     function updateGeminiCli(g) {
+        gcliLastFetchedMs = Date.now()
         gcliAccount = g.account || ""
         gcliTier = g.tier || "Free"
         var quota = g.quota || {}
@@ -643,6 +1000,7 @@ PlasmoidItem {
         }
         gcliDailyTokens = g.daily_tokens || []
         gcliFineTokens = g.fine_tokens || []
+        gcliFineWindowMode = g.fine_window_mode || "live"
         gcliRecentSessions = g.recent_sessions || []
         gcliActiveSessionsList = g.active_sessions || []
         gcliModelsUsed = g.models_used || {}
@@ -666,6 +1024,7 @@ PlasmoidItem {
     }
 
     function updateAntigravity(a) {
+        agLastFetchedMs = Date.now()
         agOk = a.ok || false
         agPlan = a.plan || ""
         agEmail = a.email || ""
@@ -700,6 +1059,7 @@ PlasmoidItem {
     }
 
     function updateOpenCode(o) {
+        ocLastFetchedMs = Date.now()
         ocActiveSessions = (o.sessions || {}).active || 0
         ocTotalSessions = (o.sessions || {}).total || 0
         var t = o.tokens || {}
@@ -769,7 +1129,7 @@ PlasmoidItem {
         piFineTokens = p.fine_tokens || []
         piRecentSessions = p.recent_sessions || []
         piModelsUsed = p.models_used || {}
-        // Extract PIDs for I/O polling
+
         var pids = []
         var sessions = p.active_sessions || []
         for (var i = 0; i < sessions.length; i++) {
@@ -787,6 +1147,36 @@ PlasmoidItem {
         if (pidsChanged) _piPrevRchar = {}
     }
 
+    function updateCopilot(c) {
+        copilotLastFetchedMs = Date.now()
+        copilotUser = c.user || ""
+        copilotSessionsActive = c.sessions.active || 0
+        copilotSessionsToday = c.sessions.today || 0
+        copilotSessionsWeek = c.sessions.week || 0
+        copilotSessionsMonth = c.sessions.month || 0
+        copilotSessionsTotal = c.sessions.total || 0
+        copilotTurnsToday = c.turns.today || 0
+        copilotTurnsWeek = c.turns.week || 0
+        copilotTurnsMonth = c.turns.month || 0
+        copilotTurnsTotal = c.turns.total || 0
+        copilotDailyTurns = c.daily_turns || []
+        copilotFineTurns = c.fine_turns || []
+        copilotRecentSessions = c.recent_sessions || []
+    }
+
+    function updateKiro(k) {
+        kiroLastFetchedMs = Date.now()
+        kiroHomeDir = k.home_dir || ""
+        kiroVersion = k.version || ""
+        kiroRunning = k.is_running || false
+        kiroPowersInstalled = k.powers_installed || 0
+        kiroExtensions = k.extensions_count || 0
+        kiroPowers = k.powers || []
+        kiroRecentDirectories = k.recent_directories || []
+        kiroCreditsUsed = k.credits_used || 0
+        kiroCreditsLimit = k.credits_limit || 1000
+    }
+
     // ─── Compact Representation ───
     compactRepresentation: Item {
         Layout.minimumWidth: compactRow.implicitWidth + Kirigami.Units.smallSpacing * 2
@@ -801,7 +1191,7 @@ PlasmoidItem {
             Rectangle {
                 width: 8; height: 8; radius: 4
                 visible: root.compactStyle === "ring"
-                color: root.activeSessions > 0 ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                color: root.compactMetric.color
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -809,8 +1199,8 @@ PlasmoidItem {
                 id: miniRing
                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                visible: root.compactStyle === "ring" && root.sessionInputLimit > 0
-                property real pct: root.sessionInputLimit > 0 ? Math.min(1.0, root.sessionInputUsed / root.sessionInputLimit) : 0
+                visible: root.compactStyle === "ring" && root.compactMetric.pct >= 0
+                property real pct: root.compactMetric.pct >= 0 ? root.compactMetric.pct : 0
                 onPctChanged: requestPaint()
                 onPaint: {
                     var ctx = getContext("2d"); ctx.reset()
@@ -819,18 +1209,14 @@ PlasmoidItem {
                     ctx.strokeStyle = Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15); ctx.stroke()
                     if (pct > 0) {
                         ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + 2*Math.PI*pct); ctx.lineWidth = 2
-                        ctx.strokeStyle = pct > 0.9 ? Kirigami.Theme.negativeTextColor : pct > 0.7 ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.positiveTextColor; ctx.stroke()
+                        ctx.strokeStyle = root.compactMetric.color; ctx.stroke()
                     }
                 }
             }
 
             PlasmaComponents.Label {
                 visible: root.compactStyle === "ring"
-                text: {
-                    if (root.sessionInputLimit > 0) return Math.round((root.sessionInputUsed / root.sessionInputLimit) * 100) + "%"
-                    if (root.promptsToday > 0) return root.promptsToday + "p"
-                    return root.tierName || "AI"
-                }
+                text: root.compactMetric.text
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
             }
 
@@ -841,12 +1227,10 @@ PlasmoidItem {
                 Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                 visible: root.compactStyle === "tacho"
 
-                property real pct: Math.max(root.instantRate, root.gcliInstantRate, root.ocInstantRate, root.piInstantRate)
+                property real pct: root.compactMetric.pct >= 0 ? root.compactMetric.pct : 0
                 readonly property real _startRad: 3 * Math.PI / 4
                 readonly property real _sweepRad: 3 * Math.PI / 2
-                readonly property color _color: pct > 0.8 ? Kirigami.Theme.negativeTextColor
-                                              : pct > 0.5 ? Kirigami.Theme.neutralTextColor
-                                              : Kirigami.Theme.positiveTextColor
+                readonly property color _color: root.compactMetric.color
 
                 Canvas {
                     id: miniTachoBg
@@ -911,7 +1295,7 @@ PlasmoidItem {
     // ─── Full Representation ───
     fullRepresentation: Item {
         Layout.preferredWidth: root.onDesktop ? -1 : Kirigami.Units.gridUnit * 32
-        Layout.preferredHeight: root.onDesktop ? -1 : Kirigami.Units.gridUnit * 38
+        Layout.preferredHeight: root.onDesktop ? -1 : Kirigami.Units.gridUnit * (root.popupHeightUnits + 2)
         Layout.minimumWidth: Kirigami.Units.gridUnit * 20
         Layout.minimumHeight: Kirigami.Units.gridUnit * 14
         Layout.fillWidth: root.onDesktop
@@ -926,148 +1310,142 @@ PlasmoidItem {
             anchors.fill: parent
             spacing: 0
 
-            QQC2.TabBar {
-                id: tabBar
+            // Custom tab buttons (replacing TabBar to avoid index issues)
+            RowLayout {
                 Layout.fillWidth: true
-                Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                Kirigami.Theme.inherit: false
+                spacing: 0
 
-                QQC2.TabButton {
-                    icon.source: Qt.resolvedUrl("icons/summary.svg")
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.text: i18n("Summary")
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.delay: 500
-                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                    Kirigami.Theme.inherit: false
+                Repeater {
+                    model: root.enabledTabs
+                    
+                    QQC2.Button {
+                        Layout.fillWidth: true
+                        flat: true
+                        checkable: true
+                        checked: fullRepCol._activeTab === modelData.id
+                        text: modelData.name
+                        icon.source: modelData.iconSource || ""
+                        icon.name: modelData.iconSource ? "" : modelData.icon
+                        
+                        Kirigami.Theme.colorSet: modelData.complementary ? Kirigami.Theme.Complementary : Kirigami.Theme.Window
+                        Kirigami.Theme.inherit: false
+                        
+                        onClicked: fullRepCol._activeTab = modelData.id
+                    }
                 }
-                QQC2.TabButton {
-                    visible: root.enableClaude
-                    icon.source: Qt.resolvedUrl("icons/claude.svg")
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
+
+                QQC2.ToolButton {
+                    icon.name: root.pinPopupOpen ? "object-locked" : "object-unlocked"
+                    text: i18n("Pin")
                     display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.text: i18n("Claude")
+                    visible: !root.onDesktop
                     QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.delay: 500
-                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                    Kirigami.Theme.inherit: false
+                    QQC2.ToolTip.text: root.pinPopupOpen ? i18n("Unpin popup") : i18n("Pin popup open")
+                    onClicked: {
+                        var nextPinned = !root.pinPopupOpen
+                        plasmoid.configuration.pinPopupOpen = nextPinned
+                        if (nextPinned) root.expanded = true
+                    }
                 }
-                QQC2.TabButton {
-                    visible: root.enableGeminiCli
-                    icon.source: Qt.resolvedUrl("icons/gemini.png")
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.text: i18n("Gemini CLI")
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.delay: 500
-                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                    Kirigami.Theme.inherit: false
+
+                Item { Layout.fillWidth: true } // spacer
+            }
+
+            // Active tab tracking
+            property string _activeTab: "summary"
+            
+            // Initialize on completion
+            Component.onCompleted: {
+                if (root.enabledTabs.length > 0) {
+                    _activeTab = "summary"
                 }
-                QQC2.TabButton {
-                    visible: root.enableAntigravity
-                    icon.source: Qt.resolvedUrl("icons/antigravity.png")
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.text: i18n("Antigravity / Windsurf")
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.delay: 500
-                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                    Kirigami.Theme.inherit: false
+            }
+            Connections {
+                target: root
+                function onCompactServiceResolvedChanged() {
+                    if (!root._isServiceEnabled(fullRepCol._activeTab)) {
+                        fullRepCol._activeTab = root.compactServiceResolved
+                    }
                 }
-                QQC2.TabButton {
-                    visible: root.enablePi
-                    icon.source: Qt.resolvedUrl("icons/pi.svg")
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.text: i18n("Pi")
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.delay: 500
-                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                    Kirigami.Theme.inherit: false
-                }
-                QQC2.TabButton {
-                    visible: root.enableOpenCode
-                    icon.source: Qt.resolvedUrl("icons/opencode.svg")
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.text: i18n("OpenCode")
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.delay: 500
-                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                    Kirigami.Theme.inherit: false
-                }
-                QQC2.TabButton {
-                    visible: root.enableGeminiApi
-                    icon.source: Qt.resolvedUrl("icons/gemini.png")
-                    icon.width: Kirigami.Units.iconSizes.smallMedium
-                    icon.height: Kirigami.Units.iconSizes.smallMedium
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.text: i18n("Gemini API")
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.delay: 500
-                    Kirigami.Theme.colorSet: Kirigami.Theme.Complementary
-                    Kirigami.Theme.inherit: false
+                function onEnabledTabsChanged() {
+                    if (!root._isServiceEnabled(fullRepCol._activeTab)) {
+                        fullRepCol._activeTab = "summary"
+                    }
                 }
             }
 
-            // Map visible tab index to service
-            property var _tabMap: {
-                var m = ["summary"]
-                if (root.enableClaude) m.push("claude")
-                if (root.enableGeminiCli) m.push("gcli")
-                if (root.enableAntigravity) m.push("ag")
-                if (root.enablePi) m.push("pi")
-                if (root.enableOpenCode) m.push("oc")
-                if (root.enableGeminiApi) m.push("gemini")
-                return m
+            // Content - use Item + Loaders positioned absolutely to avoid StackLayout index issues
+            // Component definitions
+            Component {
+                id: copilotComponent
+                CopilotTab { appRoot: root }
             }
-            property string _activeTab: _tabMap[tabBar.currentIndex] || ""
-
-            StackLayout {
+            Component {
+                id: kiroComponent
+                KiroTab { appRoot: root }
+            }
+            Component {
+                id: summaryComponent
+                SummaryTab { appRoot: root }
+            }
+            
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: tabBar.currentIndex
 
                 Loader {
+                    anchors.fill: parent
                     active: fullRepCol._activeTab === "summary"
-                    sourceComponent: Component { SummaryTab { appRoot: root } }
+                    visible: active
+                    sourceComponent: summaryComponent
                 }
                 Loader {
-                    visible: root.enableClaude
-                    active: fullRepCol._activeTab === "claude"
+                    anchors.fill: parent
+                    active: root.enableClaude && fullRepCol._activeTab === "claude"
+                    visible: active
                     sourceComponent: Component { ClaudeTab { appRoot: root } }
                 }
                 Loader {
-                    visible: root.enableGeminiCli
-                    active: fullRepCol._activeTab === "gcli"
+                    anchors.fill: parent
+                    active: root.enableGeminiCli && fullRepCol._activeTab === "gcli"
+                    visible: active
                     sourceComponent: Component { GeminiCliTab { appRoot: root } }
                 }
                 Loader {
-                    visible: root.enableAntigravity
-                    active: fullRepCol._activeTab === "ag"
+                    anchors.fill: parent
+                    active: root.enableAntigravity && fullRepCol._activeTab === "ag"
+                    visible: active
                     sourceComponent: Component { AntigravityTab { appRoot: root } }
                 }
                 Loader {
-                    visible: root.enablePi
-                    active: fullRepCol._activeTab === "pi"
+                    anchors.fill: parent
+                    active: root.enablePi && fullRepCol._activeTab === "pi"
+                    visible: active
                     sourceComponent: Component { PiTab { appRoot: root } }
                 }
                 Loader {
-                    visible: root.enableOpenCode
-                    active: fullRepCol._activeTab === "oc"
+                    anchors.fill: parent
+                    active: root.enableOpenCode && fullRepCol._activeTab === "oc"
+                    visible: active
                     sourceComponent: Component { OpenCodeTab { appRoot: root } }
                 }
                 Loader {
-                    visible: root.enableGeminiApi
-                    active: fullRepCol._activeTab === "gemini"
+                    anchors.fill: parent
+                    active: root.enableGeminiApi && fullRepCol._activeTab === "gemini"
+                    visible: active
                     sourceComponent: Component { GeminiTab { appRoot: root } }
+                }
+                Loader {
+                    anchors.fill: parent
+                    active: root.enableCopilot && fullRepCol._activeTab === "copilot"
+                    visible: active
+                    sourceComponent: copilotComponent
+                }
+                Loader {
+                    anchors.fill: parent
+                    active: root.enableKiro && fullRepCol._activeTab === "kiro"
+                    visible: active
+                    sourceComponent: kiroComponent
                 }
             }
         }

@@ -13,6 +13,7 @@ Item {
     property real maxValue: 200000000
     property real greenLimit: 0
     property string label: "tok/h"
+    property real activityLevel: 0  // 0-1 for visual feedback (jitter intensity) without affecting value
 
     // Optional inner ring (concentric, thinner)
     property real innerValue: 0
@@ -30,18 +31,20 @@ Item {
     onPctChanged: { _rising = (pct > _prevPctSnap); _prevPctSnap = pct }
     property real _prevPctSnap: 0  // updated only on pct change, not per-frame
 
-    // Engine vibration — jitter only while value is actively changing
+    // Engine vibration — jitter based on activityLevel (if provided) or value changes
     property real _jitter: 0
     property bool _active: false
-    onValueChanged: { _active = true; _idleTimer.restart() }
-    Timer { id: _idleTimer; interval: 4000; onTriggered: tacho._active = false }
+    onValueChanged: { if (activityLevel <= 0) { _active = true; _idleTimer.restart() } }
+    onActivityLevelChanged: { if (activityLevel > 0) _active = true }
+    Timer { id: _idleTimer; interval: 4000; onTriggered: if (tacho.activityLevel <= 0) tacho._active = false }
     Timer {
         id: jitterTimer
         interval: 200
-        running: tacho._active && tacho.pct > 0
+        running: tacho._active && (tacho.pct > 0 || tacho.activityLevel > 0)
         repeat: true
         onTriggered: {
-            var amplitude = 0.3 + tacho.pct * 1.5
+            var effectivePct = activityLevel > 0 ? activityLevel : pct
+            var amplitude = 0.3 + effectivePct * 1.5
             tacho._jitter = (Math.random() - 0.5) * 2 * amplitude
         }
         onRunningChanged: if (!running) tacho._jitter = 0

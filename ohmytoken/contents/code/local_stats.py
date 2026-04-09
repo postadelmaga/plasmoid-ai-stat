@@ -24,6 +24,7 @@ history_file = os.path.join(claude_dir, "history.jsonl")
 telemetry_dir = os.path.join(claude_dir, "telemetry")
 sessions_dir = os.path.join(claude_dir, "sessions")
 projects_dir = os.path.join(claude_dir, "projects")
+stats_cache_file = os.path.join(claude_dir, "stats-cache.json")
 
 cache_dir = os.path.expanduser("~/.cache/ohmytoken")
 daily_cache_file = os.path.join(cache_dir, "daily_tokens.json")
@@ -79,6 +80,26 @@ try:
     oauth = creds.get("claudeAiOauth", {})
     sub_type = oauth.get("subscriptionType", "unknown")
     tier = oauth.get("rateLimitTier", "unknown")
+    
+    tier_map = {
+        "pro": "default_claude_pro",
+        "team": "default_claude_team",
+        "max": "default_claude_max",
+        "max_5x": "default_claude_max_5x"
+    }
+    tier_aliases = {
+        "default_claude_ai": "default_claude_pro",
+        "default_claude_ai_team": "default_claude_team",
+        "default_claude_ai_max": "default_claude_max",
+        "default_claude_ai_max_5x": "default_claude_max_5x",
+    }
+    if tier in tier_aliases:
+        tier = tier_aliases[tier]
+
+    # If no explicit tier but we have subscription type, map it.
+    if tier == "unknown" and sub_type != "unknown":
+        tier = tier_map.get(sub_type.lower(), "unknown")
+    
     if tier in TIER_LIMITS:
         limits = TIER_LIMITS[tier]
     else:
@@ -86,6 +107,11 @@ try:
             if k in tier or tier in k:
                 limits = v
                 break
+    # Last-resort mapping for unforeseen tier strings.
+    if limits is None and sub_type != "unknown":
+        mapped_tier = tier_map.get(sub_type.lower())
+        if mapped_tier in TIER_LIMITS:
+            limits = TIER_LIMITS[mapped_tier]
 except:
     pass
 
@@ -130,8 +156,10 @@ except:
 
 daily_token_map = {}
 fine_token_map = {}
+fine_token_map_all = {}
 models_used = {}
 prompts = {"today": 0, "week": 0, "month": 0, "total": 0}
+last_token_ts_ms = 0
 
 HOURLY_WINDOW = 12
 hourly_cutoff_ts = (now_utc - timedelta(hours=HOURLY_WINDOW)).timestamp() * 1000
@@ -142,8 +170,11 @@ rate_cutoff_ts = now_ms - RATE_WINDOW_LONG
 recent_events = []  # [(ts_ms, inp, out, cr, cc)]
 
 def add_tokens_by_ts(ts_ms, inp, out, cr, cc):
-    global win_input, win_output
+    global win_input, win_output, last_token_ts_ms
     total_in = inp + cr + cc
+    if ts_ms > 0 and (total_in > 0 or out > 0):
+        if ts_ms > last_token_ts_ms:
+            last_token_ts_ms = ts_ms
     # Daily bucket (local time)
     try:
         dt = datetime.fromtimestamp(ts_ms / 1000)
@@ -152,10 +183,14 @@ def add_tokens_by_ts(ts_ms, inp, out, cr, cc):
             daily_token_map[day] = {"input": 0, "output": 0}
         daily_token_map[day]["input"] += total_in
         daily_token_map[day]["output"] += out
+        minute = (dt.minute // 5) * 5
+        fine_key = f"{day} {dt.hour:02d}:{minute:02d}"
+        if fine_key not in fine_token_map_all:
+            fine_token_map_all[fine_key] = {"input": 0, "output": 0}
+        fine_token_map_all[fine_key]["input"] += total_in
+        fine_token_map_all[fine_key]["output"] += out
         # 5-minute bucket (only for recent hours)
         if ts_ms >= hourly_cutoff_ts:
-            minute = (dt.minute // 5) * 5
-            fine_key = f"{day} {dt.hour:02d}:{minute:02d}"
             if fine_key not in fine_token_map:
                 fine_token_map[fine_key] = {"input": 0, "output": 0}
             fine_token_map[fine_key]["input"] += total_in
@@ -465,31 +500,77 @@ except:
     pass
 
 recent_sessions = []
-for sid, s in seen_sessions.items():
-    ev_ts = _parse_iso_ts(s["timestamp"]) if s["timestamp"] else now_ms
-    add_tokens_by_ts(ev_ts, s["input"], s["output"], s["cache_read"], s["cache_create"])
-    cost = s["cost"]
-    if ev_ts >= today_ts:
-        cost_today += cost
-    if ev_ts >= week_ts:
-        cost_week += cost
-    cost_total += cost
-    model = s["model"]
-    if model:
-        if model not in models_used:
-            models_used[model] = {"input": 0, "output": 0, "cost": 0}
-        models_used[model]["input"] += s["input"]
-        models_used[model]["output"] += s["output"]
-        models_used[model]["cost"] += cost
-    if cost > 0:
-        recent_sessions.append({
-            "id": sid[:8], "cost": round(cost, 4), "tokens": s["_total_tok"],
-            "duration_min": round(s["duration"] / 60000, 1) if s["duration"] else 0,
-            "model": model, "timestamp": s["timestamp"],
-            "lines_added": s["lines_added"], "lines_removed": s["lines_removed"],
-        })
 
-recent_sessions.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+# If seen_sessions is empty (no telemetry), try to extract from history.jsonl
+if not seen_sessions:
+    try:
+        with open(history_file, 'rb') as f:
+            hist_sessions = {}
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    sid = entry.get("sessionId", "")
+                    if not sid:
+                        continue
+                    ts = entry.get("timestamp", 0)
+                    if sid not in hist_sessions:
+                        hist_sessions[sid] = {"id": sid, "timestamp": ts, "prompts": 0, "project": ""}
+                    hist_sessions[sid]["prompts"] += 1
+                    hist_sessions[sid]["timestamp"] = max(hist_sessions[sid]["timestamp"], ts)
+                    if "project" in entry:
+                        hist_sessions[sid]["project"] = entry.get("project", "")
+                except:
+                    continue
+            
+            # Convert to recent_sessions format
+            for sid, data in sorted(hist_sessions.items(), key=lambda x: x[1]["timestamp"], reverse=True)[:8]:
+                try:
+                    ts_dt = datetime.fromtimestamp(data["timestamp"] / 1000)
+                    recent_sessions.append({
+                        "id": sid[:8],
+                        "cost": 0,
+                        "tokens": 0,  # Not available from history
+                        "duration_min": 0,
+                        "model": "",
+                        "timestamp": ts_dt.isoformat() + "Z",
+                        "lines_added": 0,
+                        "lines_removed": 0,
+                        "prompts": data["prompts"],
+                        "project": data["project"]
+                    })
+                except:
+                    continue
+    except:
+        pass
+else:
+    # Use telemetry sessions
+    for sid, s in seen_sessions.items():
+        ev_ts = _parse_iso_ts(s["timestamp"]) if s["timestamp"] else now_ms
+        add_tokens_by_ts(ev_ts, s["input"], s["output"], s["cache_read"], s["cache_create"])
+        cost = s["cost"]
+        if ev_ts >= today_ts:
+            cost_today += cost
+        if ev_ts >= week_ts:
+            cost_week += cost
+        cost_total += cost
+        model = s["model"]
+        if model:
+            if model not in models_used:
+                models_used[model] = {"input": 0, "output": 0, "cost": 0}
+            models_used[model]["input"] += s["input"]
+            models_used[model]["output"] += s["output"]
+            models_used[model]["cost"] += cost
+        if s["_total_tok"] > 0:  # Show sessions with token usage, even if cost is 0
+            recent_sessions.append({
+                "id": sid[:8], "cost": round(cost, 4), "tokens": s["_total_tok"],
+                "duration_min": round(s["duration"] / 60000, 1) if s["duration"] else 0,
+                "model": model, "timestamp": s["timestamp"],
+                "lines_added": s["lines_added"], "lines_removed": s["lines_removed"],
+            })
+
+    recent_sessions.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
 # --- Merge daily data with cache ---
 for day, vals in daily_token_cache.items():
@@ -522,7 +603,13 @@ for i in range(7, -1, -1):
 # Fine-grained chart: pre-compute bucket keys in batch
 FINE_BUCKET_MIN = 5
 fine_tokens = []
+fine_window_mode = "live"
+source_fine_map = fine_token_map
 base_dt = now_local.replace(second=0, microsecond=0)
+if len(fine_token_map) == 0 and last_token_ts_ms > 0:
+    fine_window_mode = "last_active"
+    source_fine_map = fine_token_map_all
+    base_dt = datetime.fromtimestamp(last_token_ts_ms / 1000).replace(second=0, microsecond=0)
 base_minute = (base_dt.minute // FINE_BUCKET_MIN) * FINE_BUCKET_MIN
 base_dt = base_dt.replace(minute=base_minute)
 total_buckets = (HOURLY_WINDOW * 60) // FINE_BUCKET_MIN
@@ -530,7 +617,7 @@ for i in range(total_buckets - 1, -1, -1):
     dt_b = base_dt - timedelta(minutes=i * FINE_BUCKET_MIN)
     fine_key = f"{dt_b.strftime('%Y-%m-%d')} {dt_b.hour:02d}:{dt_b.minute:02d}"
     label = f"{dt_b.hour:02d}:{dt_b.minute:02d}"
-    entry = fine_token_map.get(fine_key, {"input": 0, "output": 0})
+    entry = source_fine_map.get(fine_key, {"input": 0, "output": 0})
     fine_tokens.append({"t": label, "input": entry["input"], "output": entry["output"]})
 
 # --- Throughput (per-type rates) ---
@@ -561,9 +648,34 @@ else:
     rate_output_5m = rate_output_30m = 0.0
     rate_all_5m = rate_all_30m = 0.0
 
+# --- Add models from stats-cache.json if available ---
+try:
+    with open(stats_cache_file) as f:
+        stats_cache_data = json.load(f)
+    cache_models = stats_cache_data.get("modelUsage", {})
+    for model_name, model_data in cache_models.items():
+        if model_name not in models_used:
+            models_used[model_name] = {"input": 0, "output": 0, "cost": 0}
+        # Add the cached data (these are totals, not incrementals)
+        models_used[model_name]["input"] = model_data.get("inputTokens", 0)
+        models_used[model_name]["output"] = model_data.get("outputTokens", 0)
+        models_used[model_name]["cost"] = model_data.get("costUSD", 0)
+except:
+    pass
+
 print(json.dumps({
     "subscription": {"type": sub_type, "tier": tier},
-    "limits": limits,
+    "limits": {
+        "input_tokens_per_day": daily_in,
+        "output_tokens_per_day": daily_out,
+        "daily_input": daily_in,
+        "daily_output": daily_out,
+        "weekly_input": daily_in * 7 if daily_in > 0 else 0,
+        "weekly_output": daily_out * 7 if daily_out > 0 else 0,
+        "session_input": daily_in // 5 if daily_in > 0 else 0,
+        "session_output": daily_out // 5 if daily_out > 0 else 0,
+        "tier_label": limits.get("label") if limits else None,
+    } if daily_in > 0 or daily_out > 0 else None,
     "sessions": {"active": active_count},
     "prompts": prompts,
     "tokens": {"today": tok_today, "week": tok_week, "month": tok_month, "total": tok_total},
@@ -576,6 +688,7 @@ print(json.dumps({
     },
     "daily_tokens": daily_tokens,
     "fine_tokens": fine_tokens,
+    "fine_window_mode": fine_window_mode,
     "throughput": {
         "rate_input_5m": round(rate_input_5m), "rate_input_30m": round(rate_input_30m),
         "rate_output_5m": round(rate_output_5m), "rate_output_30m": round(rate_output_30m),
