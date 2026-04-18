@@ -59,6 +59,41 @@ Flickable {
     readonly property real combinedOutputRate: Math.max(appRoot.instantOutputRate, appRoot.gcliInstantOutputRate, appRoot.ocInstantOutputRate, appRoot.agInstantOutputRate, appRoot.piInstantOutputRate)
     readonly property real combinedAvg: Math.max(appRoot.rateAll30m, appRoot.gcliRateAll30m, appRoot.ocRateAll30m, appRoot.agRateAll30m, appRoot.piRateAll30m)
 
+    // Merge multiple [{<keyField>, input, output}, ...] arrays by key, summing input/output.
+    // Preserves the temporal order from the longest input source (each provider produces
+    // its own already-ordered window — the longest one is the safest canonical sequence,
+    // and "HH:MM" lex-sort would break across-midnight 12h windows).
+    function mergeByKey(sources, keyField) {
+        var canonical = []
+        for (var s = 0; s < sources.length; s++) {
+            var arr = sources[s] || []
+            if (arr.length > canonical.length) canonical = arr
+        }
+        if (canonical.length === 0) return []
+
+        var out = new Array(canonical.length)
+        var idx = {}
+        for (var i = 0; i < canonical.length; i++) {
+            var k = canonical[i][keyField]
+            var row = { input: 0, output: 0 }
+            row[keyField] = k
+            out[i] = row
+            idx[k] = i
+        }
+        for (var s2 = 0; s2 < sources.length; s2++) {
+            var arr2 = sources[s2] || []
+            for (var j = 0; j < arr2.length; j++) {
+                var r = arr2[j]
+                if (!r) continue
+                var pos = idx[r[keyField]]
+                if (pos === undefined) continue  // key not in canonical window — drop
+                out[pos].input += (r.input || 0)
+                out[pos].output += (r.output || 0)
+            }
+        }
+        return out
+    }
+
     ColumnLayout {
         id: summaryCol
         width: parent.width - Kirigami.Units.smallSpacing - (scrollBar.visible ? scrollBar.width : 0)
@@ -195,7 +230,7 @@ Flickable {
             }
         }
 
-        // Combined 12h Chart (merge fine tokens from all providers)
+        // Combined 12h Chart (merge fine tokens from all providers, summing by time bucket)
         Item {
             visible: _mergedFine.length > 0
             Layout.fillWidth: true
@@ -203,13 +238,13 @@ Flickable {
             Layout.margins: Kirigami.Units.smallSpacing
 
             property var _mergedFine: {
-                var all = []
-                if (appRoot.enableClaude) all = all.concat(appRoot.fineTokens)
-                if (appRoot.enableGeminiCli) all = all.concat(appRoot.gcliFineTokens)
-                if (appRoot.enableAntigravity) all = all.concat(appRoot.agFineTokens)
-                if (appRoot.enableOpenCode) all = all.concat(appRoot.ocFineTokens)
-                if (appRoot.enablePi) all = all.concat(appRoot.piFineTokens)
-                return all
+                var sources = []
+                if (appRoot.enableClaude) sources.push(appRoot.fineTokens)
+                if (appRoot.enableGeminiCli) sources.push(appRoot.gcliFineTokens)
+                if (appRoot.enableAntigravity) sources.push(appRoot.agFineTokens)
+                if (appRoot.enableOpenCode) sources.push(appRoot.ocFineTokens)
+                if (appRoot.enablePi) sources.push(appRoot.piFineTokens)
+                return mergeByKey(sources, "t")
             }
 
             ColumnLayout {
@@ -219,7 +254,7 @@ Flickable {
             }
         }
 
-        // Combined Daily Chart
+        // Combined Daily Chart (merge by day, summing input/output)
         Item {
             visible: _mergedDaily.length > 0
             Layout.fillWidth: true
@@ -227,13 +262,13 @@ Flickable {
             Layout.margins: Kirigami.Units.smallSpacing
 
             property var _mergedDaily: {
-                var all = []
-                if (appRoot.enableClaude) all = all.concat(appRoot.dailyTokens)
-                if (appRoot.enableGeminiCli) all = all.concat(appRoot.gcliDailyTokens)
-                if (appRoot.enableAntigravity) all = all.concat(appRoot.agDailyTokens)
-                if (appRoot.enableOpenCode) all = all.concat(appRoot.ocDailyTokens)
-                if (appRoot.enablePi) all = all.concat(appRoot.piDailyTokens)
-                return all
+                var sources = []
+                if (appRoot.enableClaude) sources.push(appRoot.dailyTokens)
+                if (appRoot.enableGeminiCli) sources.push(appRoot.gcliDailyTokens)
+                if (appRoot.enableAntigravity) sources.push(appRoot.agDailyTokens)
+                if (appRoot.enableOpenCode) sources.push(appRoot.ocDailyTokens)
+                if (appRoot.enablePi) sources.push(appRoot.piDailyTokens)
+                return mergeByKey(sources, "day")
             }
 
             ColumnLayout {
