@@ -52,6 +52,7 @@ week_ts = (local_midnight - timedelta(days=7)).timestamp() * 1000
 month_ts = (local_midnight - timedelta(days=30)).timestamp() * 1000
 
 WINDOW_HOURS = [5, 5, 5, 5, 4]
+WINDOW_DURATION_MS = 5 * 3600 * 1000
 window_boundaries = []
 cum_h = 0
 for wh in WINDOW_HOURS:
@@ -66,8 +67,16 @@ for i, (ws, we) in enumerate(window_boundaries):
         current_window_idx = i
         break
 
+# Fallback (fixed grid) — overridden below once we've seen real activity.
 cur_win_start = window_boundaries[current_window_idx][0]
 cur_win_end = window_boundaries[current_window_idx][1]
+
+# Buffer for rolling-window detection: Claude's real 5h rate-limit window
+# starts from the first message after a ≥5h gap, not from a fixed clock grid.
+# We keep ~6h of events so we can reconstruct the current window start from data.
+_WINDOW_BUFFER_MS = WINDOW_DURATION_MS + 3600 * 1000
+window_event_cutoff_ts = now_ms - _WINDOW_BUFFER_MS
+window_events = []  # [(ts_ms, inp, out, cr, cc)]
 
 # --- Credentials & tier ---
 sub_type = "unknown"
@@ -174,9 +183,10 @@ def add_tokens_by_ts(ts_ms, inp, out, cr, cc):
                 tok_today["cache_read"] += cr; tok_today["cache_create"] += cc
     tok_total["input"] += inp; tok_total["output"] += out
     tok_total["cache_read"] += cr; tok_total["cache_create"] += cc
-    # Session window
-    if cur_win_start <= ts_ms < cur_win_end:
-        win_input += total_in; win_output += out
+    # Session window: buffer events; computed after full scan so we can align
+    # to the real rolling 5h window (first-message-after-gap), not a fixed grid.
+    if ts_ms >= window_event_cutoff_ts:
+        window_events.append((ts_ms, inp, out, cr, cc))
     # Rate tracking — keep components separate for per-type rates
     if ts_ms >= rate_cutoff_ts:
         recent_events.append((ts_ms, inp, out, cr, cc))
@@ -561,6 +571,36 @@ else:
     rate_output_5m = rate_output_30m = 0.0
     rate_all_5m = rate_all_30m = 0.0
 
+# --- Rolling session window detection ---
+# Walk events ascending; a new window starts whenever an event arrives ≥5h
+# after the previous window start. The last computed start is the current one
+# if it hasn't expired yet; otherwise fall back to the fixed clock grid.
+window_source = "fixed"
+if window_events:
+    window_events.sort(key=lambda e: e[0])
+    ws_roll = window_events[0][0]
+    for ev in window_events:
+        if ev[0] >= ws_roll + WINDOW_DURATION_MS:
+            ws_roll = ev[0]
+    we_roll = ws_roll + WINDOW_DURATION_MS
+    if we_roll > now_ms:
+        cur_win_start = ws_roll
+        cur_win_end = we_roll
+        window_source = "rolling"
+        # Realign window slot index to whichever fixed slot contains the
+        # detected start (keeps the "N/5" indicator meaningful).
+        for i, (ws_fb, we_fb) in enumerate(window_boundaries):
+            if ws_fb <= ws_roll < we_fb:
+                current_window_idx = i
+                break
+
+win_input = 0
+win_output = 0
+for ts, inp, out, cr, cc in window_events:
+    if cur_win_start <= ts < cur_win_end:
+        win_input += inp + cr + cc
+        win_output += out
+
 print(json.dumps({
     "subscription": {"type": sub_type, "tier": tier},
     "limits": limits,
@@ -570,7 +610,9 @@ print(json.dumps({
     "est_cost": {"today": round(cost_today, 4), "week": round(cost_week, 4), "total": round(cost_total, 4)},
     "session_window": {
         "number": current_window_idx + 1, "total": len(WINDOW_HOURS),
+        "start_ts": int(cur_win_start),
         "end_ts": int(cur_win_end),
+        "source": window_source,
         "input_limit": daily_in // 5, "output_limit": daily_out // 5,
         "input_used": win_input, "output_used": win_output,
     },
